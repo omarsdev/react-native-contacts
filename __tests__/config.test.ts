@@ -28,6 +28,7 @@ describe("package metadata", () => {
       "utf8"
     );
     expect(bridge).toMatch(/import React/);
+    expect(bridge).toMatch(/ContactsLastUpdatedSpec/);
     expect(bridge).toMatch(/@escaping RCTPromiseResolveBlock/);
   });
 
@@ -64,5 +65,14 @@ describe("package metadata", () => {
     );
     expect(specSource).toContain("ReactModuleWithSpec");
     expect(specSource).toContain("TurboModule");
+  });
+
+  it("defines a TurboModule spec for iOS", () => {
+    const iosSpec = fs.readFileSync(
+      path.join(root, "ios", "NativeContactsLastUpdatedSpec.swift"),
+      "utf8"
+    );
+    expect(iosSpec).toContain("protocol ContactsLastUpdatedSpec");
+    expect(iosSpec).toContain("RCTTurboModule");
   });
 });

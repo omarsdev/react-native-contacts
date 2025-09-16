@@ -3,7 +3,7 @@ import Contacts
 import React
 
 @objc(ContactsLastUpdated)
-class ContactsLastUpdated: NSObject {
+class ContactsLastUpdated: NSObject, ContactsLastUpdatedSpec {
 
   private let store = CNContactStore()
   private let cache = ContactsLastUpdatedCache()
