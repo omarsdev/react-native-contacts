@@ -19,7 +19,8 @@
     "src",
     "android",
     "ios",
-    "react-native-contacts-last-updated.podspec"
+    "react-native-contacts-last-updated.podspec",
+    "react-native.config.js"
   ],
   "scripts": {
     "test": "jest"
