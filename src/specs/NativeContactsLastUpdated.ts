@@ -1,5 +1,5 @@
 import type { TurboModule } from "react-native";
-import { TurboModuleRegistry } from "react-native";
+import { NativeModules, Platform, TurboModuleRegistry } from "react-native";
 
 export type Phone = { label?: string; number: string };
 export type Email = { label?: string; address: string };
@@ -25,4 +25,22 @@ export interface Spec extends TurboModule {
   hasPermission(): Promise<boolean>;
 }
 
-export default TurboModuleRegistry.getEnforcing<Spec>("ContactsLastUpdated");
+const LINKING_ERROR =
+  `The package '@omarsdev/react-native-contacts-last-updated' doesn't seem to be linked correctly.\n` +
+  "Make sure: \n" +
+  Platform.select({
+    ios: "- You have run 'pod install'\n",
+    default: "",
+  }) +
+  "- You rebuilt the app after installing the package\n" +
+  "- You are not using Expo managed workflow";
+
+const Native: Spec | undefined = globalThis.__turboModuleProxy
+  ? TurboModuleRegistry.get<Spec>("ContactsLastUpdated")
+  : (NativeModules.ContactsLastUpdated as Spec | undefined);
+
+if (!Native) {
+  throw new Error(LINKING_ERROR);
+}
+
+export default Native;
