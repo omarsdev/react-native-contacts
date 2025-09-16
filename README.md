@@ -1,77 +1,161 @@
 # react-native-contacts-last-updated
 
-Access the device address book with support for:
+Contacts at scale for React Native, with fast first-run paging and efficient “delta since last sync” on Android and iOS.
 
-- Paged fetch of all contacts (Android sorted by last updated, iOS order undefined)
-- Paged delta sync (only contacts added/updated since a token)
+Why this library
 
-## Installation
+- Large address books without jank: fetch 10k+ contacts in pages (200–500) to keep UI responsive.
+- Real delta sync: only fetch contacts that changed since your last run.
+- Native tokens, minimal JS state: tokens are persisted natively to avoid storing massive lists in JS.
+- Android sorted by last updated: newest changes first for better UX.
+- iOS resilient strategy: uses Contacts change history when available, and a native fingerprint snapshot fallback when it isn’t.
 
+Install
 
 ```sh
+# with Yarn
+yarn add react-native-contacts-last-updated
+
+# with npm
 npm install react-native-contacts-last-updated
 ```
 
-
-## Usage
-
-
-```js
-import {
-  getAllPaged,
-  getUpdatedSincePaged,
-  streamAll,
-  streamUpdatedSince,
-  type Contact,
-} from 'react-native-contacts-last-updated';
-
-// First run: fetch everything in chunks to avoid blocking
-for await (const page of streamAll(300)) {
-  // page is Contact[]
-  console.log('Got', page.length, 'contacts');
-}
-
-// Second run: fetch only changes since your saved token
-// Android: token is a millisecond timestamp string (e.g., `${Date.now()}`)
-// iOS: token is a base64-encoded CNChangeHistory token
-let since = await loadTokenFromStorage();
-let finalToken = since;
-for await (const { items } of streamUpdatedSince(since, 300)) {
-  // items is Contact[] of added/updated contacts
-  console.log('Delta items', items.length);
-}
-// After finishing all pages, streamUpdatedSince returns the new token
-finalToken = await (async () => {
-  const iterator = streamUpdatedSince(since, 300);
-  let r = await iterator.next();
-  while (!r.done) r = await iterator.next();
-  return r.value; // new token
-})();
-await saveTokenToStorage(finalToken);
-```
-
-Notes
-
-- Android sorts by `ContactsContract.Contacts.CONTACT_LAST_UPDATED_TIMESTAMP` (desc) and uses `Date.now()` as the next delta token.
-- iOS does not expose per-contact last updated timestamps; full fetch order is undefined. For delta, we use `CNContactStore` change history tokens. On the first run, call `getAllPaged`/`streamAll` and store the token from `getUpdatedSincePaged('', 0, 1).nextSince` if desired.
-- Ensure your app requests Contacts permission at runtime.
-
 Permissions
 
-- Android: the library declares `READ_CONTACTS` in its manifest. You must request runtime permission before calling APIs.
-- iOS: add `NSContactsUsageDescription` to your app `Info.plist`.
+- Android: request `READ_CONTACTS` at runtime before usage.
+  - Optional (manifest) — if you prefer declaring in your app too:
+    ```xml
+    <!-- android/app/src/main/AndroidManifest.xml -->
+    <manifest ...>
+      <uses-permission android:name="android.permission.READ_CONTACTS" />
+    </manifest>
+    ```
+  - Runtime request (JS):
+    ```ts
+    import {PermissionsAndroid, Platform} from 'react-native'
 
+    export async function ensureContactsPermission() {
+      if (Platform.OS !== 'android') return true
+      const res = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.READ_CONTACTS
+      )
+      return res === PermissionsAndroid.RESULTS.GRANTED
+    }
+    ```
+- iOS: add usage description to your app `Info.plist` and rebuild pods.
+  - Info.plist:
+    ```xml
+    <key>NSContactsUsageDescription</key>
+    <string>This app needs access to your contacts to sync changes.</string>
+    ```
+  - iOS will show the permission prompt the first time you access contacts.
 
-## Contributing
+Type shape
 
-- [Development workflow](CONTRIBUTING.md#development-workflow)
-- [Sending a pull request](CONTRIBUTING.md#sending-a-pull-request)
-- [Code of conduct](CODE_OF_CONDUCT.md)
+```ts
+type Contact = {
+  id: string
+  displayName: string
+  phoneNumbers: string[]
+  givenName?: string | null
+  familyName?: string | null
+  // Android only; iOS sets null
+  lastUpdatedAt?: number | null
+}
+```
 
-## License
+API reference (JS)
+
+- `getAllPaged(offset: number, limit: number): Contact[]`
+  - Paged full fetch. Android is sorted by last updated desc. iOS order is undefined.
+- `getUpdatedSincePaged(since: string, offset: number, limit: number): { items: Contact[], nextSince: string }`
+  - Paged delta since provided token.
+  - Android token: millisecond timestamp string.
+  - iOS token: base64 CNChangeHistory token (or synthetic `fp:<timestamp>` when change history doesn’t advance).
+- `getPersistedSince(): string`
+  - Returns the current native‑persisted token (empty string if none).
+- `getUpdatedFromPersistedPaged(offset: number, limit: number): { items: Contact[], nextSince: string }`
+  - Paged delta using the native‑persisted token without passing it from JS.
+- `commitPersisted(nextSince: string): void`
+  - Commits the token at the end of a delta session and advances the iOS snapshot baseline.
+- `streamAll(pageSize?: number)`
+  - Async generator yielding pages of `Contact[]` until exhausted.
+- `streamUpdatedSince(since: string, pageSize?: number)`
+  - Async generator yielding `{ items: Contact[] }` pages; returns the final token when done.
+- `streamUpdatedFromPersisted(pageSize?: number)`
+  - Async generator using the native token; returns the committed token when done.
+
+Quick start
+
+```ts
+import {
+  streamAll,
+  streamUpdatedFromPersisted,
+} from 'react-native-contacts-last-updated'
+import { ensureContactsPermission } from './permissions' // from snippet above
+
+// First run: baseline in chunks (paged)
+if (await ensureContactsPermission()) {
+  for await (const page of streamAll(300)) {
+    // page is Contact[]
+    console.log('All page', page.length)
+  }
+}
+
+// Next runs: delta in chunks (token stored natively)
+if (await ensureContactsPermission()) {
+  for await (const { items } of streamUpdatedFromPersisted(300)) {
+    // items is Contact[] changed since last commit
+    console.log('Delta page', items.length)
+  }
+  // streamUpdatedFromPersisted commits the new token automatically
+}
+```
+
+Platform details
+
+- Android
+  - Uses `ContactsContract.Contacts.CONTACT_LAST_UPDATED_TIMESTAMP` for sorting and delta (timestamp filter).
+  - `lastUpdatedAt` is set from this value.
+- iOS
+  - Change history: uses CNContactStore change-history tokens when available.
+  - Fingerprint fallback: when change history is unavailable or returns no events, a native snapshot (id → fingerprint of name + normalized numbers) detects adds/edits; snapshot updates on `commitPersisted`.
+  - Synthetic tokens: when the system token doesn’t advance, we synthesize `fp:<timestamp>` to ensure forward progress.
+  - Note: deleted contacts aren’t returned as items (no data to fetch by ID). If you need `deletedIds` surfaced, open an issue.
+
+Recommended paging & usage
+
+- Page size 200–500 works well for large books.
+- Always commit a delta token after finishing a delta session.
+- First run: do a full fetch; then do a delta to seed/commit a token.
+
+Build & development
+
+- Prereqs: Node 20+, Yarn 3 (Berry).
+- Install deps and build the lib:
+  - `yarn` (at repo root)
+  - `yarn prepare` (runs bob/codegen; generates `lib/` and TS types)
+- Example app — Android:
+  - `cd example && yarn android`
+- Example app — iOS:
+  - `cd example/ios && pod install`
+  - `cd .. && yarn ios`
+- Using in your app:
+  - `yarn add react-native-contacts-last-updated`
+  - iOS: `cd ios && pod install`
+  - Rebuild the app
+
+Why install
+
+- You need to sync very large contact sets without freezing the UI.
+- You want reliable “delta since last run” on both Android and iOS.
+- You don’t want to persist huge JS arrays; tokens are handled natively.
+- You want Android sorted by latest updates and an iOS strategy that works even when change history is unavailable.
+
+License
 
 MIT
 
----
+Contributing
 
-Made with [create-react-native-library](https://github.com/callstack/react-native-builder-bob)
+- See CONTRIBUTING.md for development workflow and conventions.
