@@ -9,6 +9,8 @@ import {
   Platform,
   useColorScheme,
   StatusBar,
+  SafeAreaView,
+  ActivityIndicator,
 } from 'react-native';
 import {
   getAllPaged,
@@ -53,6 +55,7 @@ const createStyles = (theme: Theme) => {
     info: {
       marginVertical: 12,
     },
+    spacer: { height: 8 },
     text: {
       color: colors.text,
     },
@@ -62,6 +65,11 @@ const createStyles = (theme: Theme) => {
       borderColor: colors.border,
     },
     name: {
+      fontSize: 16,
+      fontWeight: '500',
+      color: colors.text,
+    },
+    id: {
       fontSize: 16,
       fontWeight: '600',
       color: colors.text,
@@ -83,6 +91,15 @@ const createStyles = (theme: Theme) => {
       color: colors.logText,
       fontSize: 10,
     },
+    listContent: {
+      paddingBottom: 40,
+    },
+    loadingBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 8,
+    },
+    loadingText: { marginLeft: 8 },
   });
 };
 
@@ -96,6 +113,7 @@ export default function App() {
   const [delta, setDelta] = React.useState<Contact[]>([]);
   const [since, setSince] = React.useState<string>('');
   const [log, setLog] = React.useState<string>('');
+  const [status, setStatus] = React.useState<string>('Idle');
 
   React.useEffect(() => {
     const ensurePermission = async () => {
@@ -122,14 +140,14 @@ export default function App() {
       return;
     }
     setLoading(true);
+    setStatus('Fetching all (paged)…');
     setDelta([]);
     try {
       const pageSize = 300;
       let offset = 0;
       const acc: Contact[] = [];
-      // Loop pages
+      const t0 = Date.now();
       for (;;) {
-        // eslint-disable-next-line no-await-in-loop
         const page = await getAllPaged(offset, pageSize);
         appendLog(`Fetched page: offset=${offset} size=${page.length}`);
         if (!page || page.length === 0) break;
@@ -138,9 +156,13 @@ export default function App() {
         if (page.length < pageSize) break;
       }
       setContacts(acc);
-      appendLog(`Completed full fetch. Total=${acc.length}`);
+      appendLog(
+        `Completed full fetch. Total=${acc.length} in ${Date.now() - t0}ms`
+      );
+      setStatus(`All contacts: ${acc.length}`);
     } catch (e: any) {
       appendLog(`Error: ${e?.message || String(e)}`);
+      setStatus('Error while fetching all');
     } finally {
       setLoading(false);
     }
@@ -152,14 +174,15 @@ export default function App() {
       return;
     }
     setLoading(true);
+    setStatus('Fetching delta…');
     setContacts([]);
     try {
       const pageSize = 300;
       let offset = 0;
       const acc: Contact[] = [];
       let sessionToken = '';
+      const t0 = Date.now();
       for (;;) {
-        // eslint-disable-next-line no-await-in-loop
         const resp = await getUpdatedFromPersistedPaged(offset, pageSize);
         const items = resp.items ?? [];
         if (!sessionToken) sessionToken = resp.nextSince || '';
@@ -177,10 +200,14 @@ export default function App() {
         setSince(sessionToken);
       }
       appendLog(
-        `Completed delta fetch. Items=${acc.length} committedSince=${sessionToken}`
+        `Completed delta fetch. Items=${acc.length} committedSince=${sessionToken} in ${Date.now() - t0}ms`
+      );
+      setStatus(
+        `Delta: ${acc.length} (since: ${sessionToken || since || 'n/a'})`
       );
     } catch (e: any) {
       appendLog(`Error: ${e?.message || String(e)}`);
+      setStatus('Error while fetching delta');
     } finally {
       setLoading(false);
     }
@@ -191,10 +218,25 @@ export default function App() {
     setDelta([]);
     setSince('');
     appendLog('State reset; since cleared');
+    setStatus('Idle');
+  };
+
+  const onBaselineNow = async () => {
+    try {
+      const current = since || (await getPersistedSince()) || '';
+      await commitPersisted(current);
+      const after = await getPersistedSince();
+      setSince(after);
+      appendLog(`Baseline snapshot rebuilt. since=${after}`);
+      setStatus('Baseline rebuilt');
+    } catch (e: any) {
+      appendLog(`Baseline error: ${e?.message || String(e)}`);
+    }
   };
 
   const renderItem = ({ item }: { item: Contact }) => (
     <View style={styles.row}>
+      <Text style={styles.id}>{item.id}</Text>
       <Text style={styles.name}>{item.displayName || '(no name)'}</Text>
       {item.lastUpdatedAt ? (
         <Text style={styles.sub}>
@@ -211,7 +253,7 @@ export default function App() {
   const header = contacts.length > 0 ? 'All Contacts' : 'Delta Contacts';
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <StatusBar
         barStyle={theme === 'dark' ? 'light-content' : 'dark-content'}
       />
@@ -221,28 +263,53 @@ export default function App() {
           onPress={onFetchAll}
           disabled={loading}
         />
-        <View style={{ height: 8 }} />
+        <View style={styles.spacer} />
         <Button title="Fetch Delta" onPress={onFetchDelta} disabled={loading} />
-        <View style={{ height: 8 }} />
-        <Button title="Reset" onPress={onReset} disabled={loading} />
+        <View style={styles.spacer} />
+        <Button
+          title="Baseline Now"
+          onPress={onBaselineNow}
+          disabled={loading}
+        />
+        <View style={styles.spacer} />
+        <Button title="Reset UI" onPress={onReset} disabled={loading} />
       </View>
       <View style={styles.info}>
-        <Text style={styles.text}>Granted: {String(granted)}</Text>
-        <Text style={styles.text}>Loading: {String(loading)}</Text>
-        <Text style={styles.text}>Since token: {since || '(empty)'}</Text>
+        <Text style={styles.text}>Status: {status}</Text>
+        <Text style={styles.text}>
+          Granted: {String(granted)} • Loading: {String(loading)}
+        </Text>
+        <Text style={styles.text}>
+          Since: {since || '(empty)'}
+          {since?.startsWith('fp:') ? ' • fingerprint' : ''}
+        </Text>
         <Text style={styles.text}>
           Showing {data.length} {header}
         </Text>
       </View>
+      {loading ? (
+        <View style={styles.loadingBox}>
+          <ActivityIndicator
+            size="small"
+            color={theme === 'dark' ? '#fff' : '#000'}
+          />
+          <Text style={[styles.text, styles.loadingText]}>Working…</Text>
+        </View>
+      ) : null}
       <FlatList
         data={data}
         keyExtractor={(i) => i.id}
         renderItem={renderItem}
-        contentContainerStyle={{ paddingBottom: 40 }}
+        contentContainerStyle={styles.listContent}
+        getItemLayout={(_, index) => ({
+          length: 72,
+          offset: 72 * index,
+          index,
+        })}
       />
       <View style={styles.logBox}>
         <Text style={styles.logText}>{log}</Text>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
