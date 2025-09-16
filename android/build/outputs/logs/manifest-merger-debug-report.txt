@@ -1,0 +1,20 @@
+-- Merging decision tree log ---
+manifest
+ADDED from /Users/omars.dev/dev/react-native-contacts-last-updated/android/src/main/AndroidManifest.xml:1:1-5:12
+INJECTED from /Users/omars.dev/dev/react-native-contacts-last-updated/android/src/main/AndroidManifest.xml:1:1-5:12
+	package
+		INJECTED from /Users/omars.dev/dev/react-native-contacts-last-updated/android/src/main/AndroidManifest.xml
+	xmlns:android
+		ADDED from /Users/omars.dev/dev/react-native-contacts-last-updated/android/src/main/AndroidManifest.xml:1:11-69
+uses-permission#android.permission.READ_CONTACTS
+ADDED from /Users/omars.dev/dev/react-native-contacts-last-updated/android/src/main/AndroidManifest.xml:3:3-70
+	android:name
+		ADDED from /Users/omars.dev/dev/react-native-contacts-last-updated/android/src/main/AndroidManifest.xml:3:20-67
+uses-sdk
+INJECTED from /Users/omars.dev/dev/react-native-contacts-last-updated/android/src/main/AndroidManifest.xml reason: use-sdk injection requested
+INJECTED from /Users/omars.dev/dev/react-native-contacts-last-updated/android/src/main/AndroidManifest.xml
+INJECTED from /Users/omars.dev/dev/react-native-contacts-last-updated/android/src/main/AndroidManifest.xml
+	android:targetSdkVersion
+		INJECTED from /Users/omars.dev/dev/react-native-contacts-last-updated/android/src/main/AndroidManifest.xml
+	android:minSdkVersion
+		INJECTED from /Users/omars.dev/dev/react-native-contacts-last-updated/android/src/main/AndroidManifest.xml
