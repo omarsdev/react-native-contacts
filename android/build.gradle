@@ -15,6 +15,11 @@ android {
         consumerProguardFiles 'consumer-rules.pro'
     }
 
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
     sourceSets {
         main {
             java.srcDirs = ['src/main/java']
@@ -23,7 +28,15 @@ android {
     }
 
     kotlinOptions {
-        jvmTarget = '1.8'
+        // Align Kotlin with app's Java 17 toolchain
+        jvmTarget = '17'
+    }
+}
+
+// Prefer Kotlin toolchain API when available (Gradle 7.6+/Kotlin 1.7+)
+plugins.withId('org.jetbrains.kotlin.android') {
+    kotlin {
+        jvmToolchain(17)
     }
 }
 

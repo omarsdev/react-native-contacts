@@ -20,7 +20,7 @@ class ContactsLastUpdatedModule(reactContext: ReactApplicationContext) :
 
   @ReactMethod
   override fun hasPermission(promise: Promise) {
-    val granted = ContextCompat.checkSelfPermission(reactContext, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
+    val granted = ContextCompat.checkSelfPermission(reactApplicationContext, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
     promise.resolve(granted)
   }
 
@@ -28,14 +28,14 @@ class ContactsLastUpdatedModule(reactContext: ReactApplicationContext) :
   override fun requestPermission(promise: Promise) {
     // Delegate permission request to JS (PermissionsAndroid).
     // Return current state for convenience.
-    val granted = ContextCompat.checkSelfPermission(reactContext, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
+    val granted = ContextCompat.checkSelfPermission(reactApplicationContext, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
     promise.resolve(if (granted) "granted" else "denied")
   }
 
   @ReactMethod
   override fun getContactsSortedByLastUpdated(options: ReadableMap?, promise: Promise) {
     try {
-      val hasPerm = ContextCompat.checkSelfPermission(reactContext, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
+      val hasPerm = ContextCompat.checkSelfPermission(reactApplicationContext, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
       if (!hasPerm) { promise.reject("E_NO_PERMISSION", "READ_CONTACTS not granted"); return }
 
       val includePhones = options?.getMap("include")?.getBoolean("phones") ?: true
@@ -48,7 +48,7 @@ class ContactsLastUpdatedModule(reactContext: ReactApplicationContext) :
         ContactsContract.Contacts.CONTACT_LAST_UPDATED_TIMESTAMP // Android-only
       )
 
-      val cursor = reactContext.contentResolver.query(
+      val cursor = reactApplicationContext.contentResolver.query(
         ContactsContract.Contacts.CONTENT_URI,
         projection,
         null,
@@ -93,7 +93,7 @@ class ContactsLastUpdatedModule(reactContext: ReactApplicationContext) :
 
   private fun getPhones(contactId: String): WritableArray {
     val arr = Arguments.createArray()
-    val phonesCursor: Cursor? = reactContext.contentResolver.query(
+    val phonesCursor: Cursor? = reactApplicationContext.contentResolver.query(
       ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
       arrayOf(
         ContactsContract.CommonDataKinds.Phone.NUMBER,
@@ -133,7 +133,7 @@ class ContactsLastUpdatedModule(reactContext: ReactApplicationContext) :
 
   private fun getEmails(contactId: String): WritableArray {
     val arr = Arguments.createArray()
-    val c = reactContext.contentResolver.query(
+    val c = reactApplicationContext.contentResolver.query(
       ContactsContract.CommonDataKinds.Email.CONTENT_URI,
       arrayOf(
         ContactsContract.CommonDataKinds.Email.ADDRESS,

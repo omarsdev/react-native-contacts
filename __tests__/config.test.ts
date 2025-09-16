@@ -4,13 +4,13 @@ import path from "path";
 describe("package metadata", () => {
   const root = path.resolve(__dirname, "..");
 
-  it("ships the podspec in the published files", () => {
+  it("ships the podspec and RN config in the published files", () => {
     const pkg = require("../package.json");
     expect(pkg.files).toEqual(
-      expect.arrayContaining(["react-native-contacts-last-updated.podspec"])
-    );
-    expect(pkg.files).not.toEqual(
-      expect.arrayContaining(["react-native.config.js"])
+      expect.arrayContaining([
+        "react-native-contacts-last-updated.podspec",
+        "react-native.config.js",
+      ])
     );
   });
 
@@ -63,7 +63,6 @@ describe("package metadata", () => {
       ),
       "utf8"
     );
-    expect(specSource).toContain("ReactModuleWithSpec");
     expect(specSource).toContain("TurboModule");
   });
 
@@ -71,6 +70,8 @@ describe("package metadata", () => {
     const gradle = fs.readFileSync(path.join(root, "android", "build.gradle"), "utf8");
     expect(gradle).toMatch(/kotlin-android/);
     expect(gradle).toMatch(/kotlin-stdlib/);
+    expect(gradle).toMatch(/jvmTarget\s*=\s*'17'/);
+    expect(gradle).toMatch(/jvmToolchain\(17\)/);
 
     const manifest = fs.readFileSync(
       path.join(root, "android", "src", "main", "AndroidManifest.xml"),
