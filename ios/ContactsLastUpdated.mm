@@ -22,6 +22,11 @@ static NSString *const kCLUPersistedSinceKey = @"ContactsLastUpdatedPersistedSin
     CNChangeHistoryFetchRequest *ch = [CNChangeHistoryFetchRequest new];
     ch.startingToken = startToken;
 
+    // Best-effort enable useful flags via KVC (SDKs differ in naming/availability)
+    @try { [ch setValue:@(YES) forKey:@"shouldUnifyResults"]; } @catch (...) {}
+    @try { [ch setValue:@(YES) forKey:@"includePropertyChanges"]; } @catch (...) {}
+    @try { [ch setValue:@(YES) forKey:@"includeGroupChanges"]; } @catch (...) {}
+
     // Prefer modern API
     SEL selModern = NSSelectorFromString(@"enumerateChangeHistoryForFetchRequest:error:usingBlock:");
     if ([store respondsToSelector:selModern]) {
