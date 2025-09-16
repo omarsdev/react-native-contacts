@@ -1,5 +1,5 @@
 {
-  "name": "react-native-contacts-last-updated",
+  "name": "@omarsdev/react-native-contacts",
   "version": "0.1.0",
   "description": "Access the device address book and track when contacts were last touched.",
   "main": "./lib/module/index.js",
@@ -56,6 +56,7 @@
   },
   "homepage": "https://github.com/omarsdev/react-native-contacts-last-updated#readme",
   "publishConfig": {
+    "access": "public",
     "registry": "https://registry.npmjs.org/"
   },
   "devDependencies": {

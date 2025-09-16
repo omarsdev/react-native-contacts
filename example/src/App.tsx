@@ -18,7 +18,7 @@ import {
   getUpdatedFromPersistedPaged,
   commitPersisted,
   type Contact,
-} from 'react-native-contacts-last-updated';
+} from '@omarsdev/react-native-contacts';
 
 type Theme = 'light' | 'dark';
 

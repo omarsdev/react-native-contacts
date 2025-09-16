@@ -2,7 +2,7 @@
   "compilerOptions": {
     "rootDir": ".",
     "paths": {
-      "react-native-contacts-last-updated": ["./src/index"]
+      "@omarsdev/react-native-contacts": ["./src/index"]
     },
     "allowUnreachableCode": false,
     "allowUnusedLabels": false,

@@ -1,4 +1,4 @@
-# react-native-contacts-last-updated
+# @omarsdev/react-native-contacts
 
 Contacts at scale for React Native, with fast first-run paging and efficient “delta since last sync” on Android and iOS.
 
@@ -14,10 +14,10 @@ Install
 
 ```sh
 # with Yarn
-yarn add react-native-contacts-last-updated
+yarn add @omarsdev/react-native-contacts
 
 # with npm
-npm install react-native-contacts-last-updated
+npm install @omarsdev/react-native-contacts
 ```
 
 Permissions
@@ -88,10 +88,7 @@ API reference (JS)
 Quick start
 
 ```ts
-import {
-  streamAll,
-  streamUpdatedFromPersisted,
-} from 'react-native-contacts-last-updated'
+import { streamAll, streamUpdatedFromPersisted } from '@omarsdev/react-native-contacts'
 import { ensureContactsPermission } from './permissions' // from snippet above
 
 // First run: baseline in chunks (paged)
@@ -141,7 +138,7 @@ Build & development
   - `cd example/ios && pod install`
   - `cd .. && yarn ios`
 - Using in your app:
-  - `yarn add react-native-contacts-last-updated`
+  - `yarn add @omarsdev/react-native-contacts`
   - iOS: `cd ios && pod install`
   - Rebuild the app
 
