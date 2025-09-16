@@ -1,1 +1,0 @@
-/Users/omars.dev/dev/react-native-contacts-last-updated/example/android/app/build/intermediates/cxx/Debug/534n5c37/obj/arm64-v8a
