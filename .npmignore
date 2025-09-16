@@ -1,0 +1,10 @@
+# Exclude local example app from npm package
+example/
+
+# Common project-only files (not needed by consumers)
+__tests__/
+.github/
+.gitignore
+yarn.lock
+tsconfig.json
+jest.config.js
