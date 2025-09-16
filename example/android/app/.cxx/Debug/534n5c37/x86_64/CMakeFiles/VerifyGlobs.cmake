@@ -5,7 +5,6 @@ cmake_policy(SET CMP0009 NEW)
 # input_SRC at /Users/omars.dev/dev/react-native-contacts-last-updated/example/node_modules/react-native/ReactAndroid/cmake-utils/ReactNative-application.cmake:47 (file)
 file(GLOB NEW_GLOB LIST_DIRECTORIES true "/Users/omars.dev/dev/react-native-contacts-last-updated/example/android/app/build/generated/autolinking/src/main/jni/*.cpp")
 set(OLD_GLOB
-  "/Users/omars.dev/dev/react-native-contacts-last-updated/example/android/app/build/generated/autolinking/src/main/jni/autolinking.cpp"
   )
 if(NOT "${NEW_GLOB}" STREQUAL "${OLD_GLOB}")
   message("-- GLOB mismatch!")

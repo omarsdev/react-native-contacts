@@ -42,3 +42,14 @@ example/.yarn/*
 !example/.yarn/releases
 !example/.yarn/sdks
 !example/.yarn/versions
+
+# Misc (example)
+example/build/
+example/.bundle/
+example/vendor/
+example/vendor/bundle/
+example/**/fastlane/report.xml
+example/**/fastlane/Preview.html
+example/**/fastlane/screenshots
+example/**/fastlane/test_output
+example/**/.xcode.env.local

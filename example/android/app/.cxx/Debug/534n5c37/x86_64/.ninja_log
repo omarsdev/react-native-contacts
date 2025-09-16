@@ -1,11 +1,10 @@
 # ninja log v5
-9	41	1758053190355560609	build.ninja	9bd7bbfe705f96ff
-0	28	0	/Users/omars.dev/dev/react-native-contacts-last-updated/example/android/app/.cxx/Debug/534n5c37/x86_64/CMakeFiles/cmake.verify_globs	12e85a19074290c5
-3	1169	1758051834866211233	CMakeFiles/appmodules.dir/Users/omars.dev/dev/react-native-contacts-last-updated/example/android/app/build/generated/autolinking/src/main/jni/autolinking.cpp.o	431dd3221d853a3
-3	1272	1758051834967421892	CMakeFiles/appmodules.dir/OnLoad.cpp.o	9d503a41f0713dd6
-1272	1338	1758051835038899396	/Users/omars.dev/dev/react-native-contacts-last-updated/example/android/app/build/intermediates/cxx/Debug/534n5c37/obj/x86_64/libappmodules.so	8441d0c6da1e27d4
 0	11	0	clean	9f8f45644555dd07
-0	8	0	/Users/omars.dev/dev/react-native-contacts-last-updated/example/android/app/.cxx/Debug/534n5c37/x86_64/CMakeFiles/cmake.verify_globs	12e85a19074290c5
-2	1183	1758053191557339994	CMakeFiles/appmodules.dir/Users/omars.dev/dev/react-native-contacts-last-updated/example/android/app/build/generated/autolinking/src/main/jni/autolinking.cpp.o	431dd3221d853a3
-3	1291	1758053191666721699	CMakeFiles/appmodules.dir/OnLoad.cpp.o	9d503a41f0713dd6
 1291	1357	1758053191736499503	/Users/omars.dev/dev/react-native-contacts-last-updated/example/android/app/build/intermediates/cxx/Debug/534n5c37/obj/x86_64/libappmodules.so	8441d0c6da1e27d4
+3	1291	1758053191666721699	CMakeFiles/appmodules.dir/OnLoad.cpp.o	9d503a41f0713dd6
+2	1183	1758053191557339994	CMakeFiles/appmodules.dir/Users/omars.dev/dev/react-native-contacts-last-updated/example/android/app/build/generated/autolinking/src/main/jni/autolinking.cpp.o	431dd3221d853a3
+0	9	1758053651978112000	/Users/omars.dev/dev/react-native-contacts-last-updated/example/android/app/.cxx/Debug/534n5c37/x86_64/CMakeFiles/cmake.verify_globs	12e85a19074290c5
+9	41	1758053652004708266	build.ninja	9bd7bbfe705f96ff
+9	43	1758053652004708266	build.ninja	9bd7bbfe705f96ff
+0	9	0	/Users/omars.dev/dev/react-native-contacts-last-updated/example/android/app/.cxx/Debug/534n5c37/x86_64/CMakeFiles/cmake.verify_globs	12e85a19074290c5
+0	5	0	clean	9f8f45644555dd07
