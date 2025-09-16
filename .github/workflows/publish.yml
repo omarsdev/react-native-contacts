@@ -27,6 +27,16 @@ jobs:
           scope: '@omarsdev'
           cache: 'yarn'
 
+      - name: Write npmrc for GitHub Packages
+        run: |
+          cat <<'EOF' > .npmrc
+          @omarsdev:registry=https://npm.pkg.github.com
+          //npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
+          always-auth=true
+          EOF
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_PACKAGES_TOKEN }}
+
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 

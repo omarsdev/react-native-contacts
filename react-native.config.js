@@ -2,7 +2,7 @@ module.exports = {
   dependency: {
     platforms: {
       ios: {
-        podspecPath: './react-native-contacts-last-updated.podspec',
+        podspec: './react-native-contacts-last-updated.podspec',
       },
       android: {
         sourceDir: './android',
