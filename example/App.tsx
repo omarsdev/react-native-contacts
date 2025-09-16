@@ -5,126 +5,288 @@
  * @format
  */
 
-import React from 'react';
-import type {PropsWithChildren} from 'react';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {
-  ScrollView,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Platform,
+  Pressable,
+  SafeAreaView,
   StatusBar,
   StyleSheet,
   Text,
-  useColorScheme,
   View,
 } from 'react-native';
-
 import {
-  Colors,
-  DebugInstructions,
-  Header,
-  LearnMoreLinks,
-  ReloadInstructions,
-} from 'react-native/Libraries/NewAppScreen';
+  Contact,
+  GetOptions,
+  getContactsSortedByLastUpdated,
+  hasPermission,
+  requestPermission,
+} from 'react-native-contacts-last-updated';
 
-type SectionProps = PropsWithChildren<{
-  title: string;
-}>;
+type FilterState = {
+  mode: GetOptions['iosMode'];
+  includePhones: boolean;
+  includeEmails: boolean;
+};
 
-function Section({children, title}: SectionProps): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
-  return (
-    <View style={styles.sectionContainer}>
-      <Text
-        style={[
-          styles.sectionTitle,
-          {
-            color: isDarkMode ? Colors.white : Colors.black,
-          },
-        ]}>
-        {title}
-      </Text>
-      <Text
-        style={[
-          styles.sectionDescription,
-          {
-            color: isDarkMode ? Colors.light : Colors.dark,
-          },
-        ]}>
-        {children}
-      </Text>
-    </View>
-  );
-}
+const INITIAL_FILTERS: FilterState = {
+  mode: Platform.OS === 'ios' ? 'cache' : undefined,
+  includePhones: true,
+  includeEmails: true,
+};
 
 function App(): React.JSX.Element {
-  const isDarkMode = useColorScheme() === 'dark';
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [filters, setFilters] = useState<FilterState>(INITIAL_FILTERS);
+  const [error, setError] = useState<string | null>(null);
 
-  const backgroundStyle = {
-    backgroundColor: isDarkMode ? Colors.darker : Colors.lighter,
-  };
+  const options = useMemo<GetOptions>(() => ({
+    iosMode: filters.mode,
+    include: {
+      phones: filters.includePhones,
+      emails: filters.includeEmails,
+    },
+  }), [filters.includeEmails, filters.includePhones, filters.mode]);
 
-  /*
-   * To keep the template simple and small we're adding padding to prevent view
-   * from rendering under the System UI.
-   * For bigger apps the recommendation is to use `react-native-safe-area-context`:
-   * https://github.com/AppAndFlow/react-native-safe-area-context
-   *
-   * You can read more about it here:
-   * https://github.com/react-native-community/discussions-and-proposals/discussions/827
-   */
-  const safePadding = '5%';
+  const loadContacts = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const permitted = await hasPermission();
+      if (!permitted) {
+        const status = await requestPermission();
+        if (status !== 'granted') {
+          setError('Permission denied. Enable Contacts permission to continue.');
+          setContacts([]);
+          return;
+        }
+      }
+
+      const result = await getContactsSortedByLastUpdated(options);
+      setContacts(result);
+    } catch (err) {
+      console.warn('Failed to load contacts', err);
+      setError(err instanceof Error ? err.message : 'Unknown error');
+      setContacts([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [options]);
+
+  useEffect(() => {
+    loadContacts();
+  }, [loadContacts]);
+
+  const togglePhones = useCallback(() => {
+    setFilters(prev => ({...prev, includePhones: !prev.includePhones}));
+  }, []);
+
+  const toggleEmails = useCallback(() => {
+    setFilters(prev => ({...prev, includeEmails: !prev.includeEmails}));
+  }, []);
+
+  const changeMode = useCallback(() => {
+    setFilters(prev => ({
+      ...prev,
+      mode: prev.mode === 'cache' ? 'alpha' : 'cache',
+    }));
+  }, []);
+
+  const renderContact = useCallback(({item}: {item: Contact}) => {
+    return (
+      <View style={styles.card}>
+        <Text style={styles.name}>{item.displayName || 'Unnamed contact'}</Text>
+        {filters.includePhones && item.phones.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionHeader}>Phones</Text>
+            {item.phones.map(phone => (
+              <Text key={`${item.id}-${phone.number}`} style={styles.row}>
+                {phone.label ?? 'Other'}: {phone.number}
+              </Text>
+            ))}
+          </View>
+        )}
+        {filters.includeEmails && item.emails.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionHeader}>Emails</Text>
+            {item.emails.map(email => (
+              <Text key={`${item.id}-${email.address}`} style={styles.row}>
+                {email.label ?? 'Other'}: {email.address}
+              </Text>
+            ))}
+          </View>
+        )}
+        {item.lastUpdated != null && (
+          <Text style={styles.meta}>
+            Last updated: {new Date(item.lastUpdated).toLocaleString()}
+          </Text>
+        )}
+      </View>
+    );
+  }, [filters.includeEmails, filters.includePhones]);
+
+  const handleRefresh = useCallback(() => {
+    loadContacts();
+  }, [loadContacts]);
+
+  useEffect(() => {
+    loadContacts();
+  }, [filters, loadContacts]);
 
   return (
-    <View style={backgroundStyle}>
-      <StatusBar
-        barStyle={isDarkMode ? 'light-content' : 'dark-content'}
-        backgroundColor={backgroundStyle.backgroundColor}
-      />
-      <ScrollView
-        style={backgroundStyle}>
-        <View style={{paddingRight: safePadding}}>
-          <Header/>
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="light-content" />
+      <View style={styles.header}>
+        <Text style={styles.title}>Contacts Last Updated</Text>
+        <Text style={styles.subtitle}>
+          Mode: {filters.mode ?? 'alpha'} · Phones: {filters.includePhones ? '✓' : '✗'} · Emails: {filters.includeEmails ? '✓' : '✗'}
+        </Text>
+        <View style={styles.actions}>
+          <Pressable style={styles.button} onPress={changeMode}>
+            <Text style={styles.buttonText}>
+              Switch to {filters.mode === 'cache' ? 'Alpha' : 'Cache'} mode
+            </Text>
+          </Pressable>
+          <Pressable style={styles.button} onPress={togglePhones}>
+            <Text style={styles.buttonText}>
+              {filters.includePhones ? 'Hide' : 'Show'} phones
+            </Text>
+          </Pressable>
+          <Pressable style={styles.button} onPress={toggleEmails}>
+            <Text style={styles.buttonText}>
+              {filters.includeEmails ? 'Hide' : 'Show'} emails
+            </Text>
+          </Pressable>
+          <Pressable style={styles.primaryButton} onPress={handleRefresh}>
+            <Text style={styles.primaryButtonText}>Refresh</Text>
+          </Pressable>
         </View>
-        <View
-          style={{
-            backgroundColor: isDarkMode ? Colors.black : Colors.white,
-            paddingHorizontal: safePadding,
-            paddingBottom: safePadding,
-          }}>
-          <Section title="Step One">
-            Edit <Text style={styles.highlight}>App.tsx</Text> to change this
-            screen and then come back to see your edits.
-          </Section>
-          <Section title="See Your Changes">
-            <ReloadInstructions />
-          </Section>
-          <Section title="Debug">
-            <DebugInstructions />
-          </Section>
-          <Section title="Learn More">
-            Read the docs to discover what to do next:
-          </Section>
-          <LearnMoreLinks />
+      </View>
+
+      {loading && (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#0066cc" />
         </View>
-      </ScrollView>
-    </View>
+      )}
+
+      {!loading && error && (
+        <View style={styles.center}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      )}
+
+      {!loading && !error && (
+        <FlatList
+          data={contacts}
+          keyExtractor={item => item.id}
+          contentContainerStyle={styles.listContent}
+          renderItem={renderContact}
+          ListEmptyComponent={
+            <Text style={styles.empty}>No contacts found.</Text>
+          }
+        />
+      )}
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  sectionContainer: {
-    marginTop: 32,
-    paddingHorizontal: 24,
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#101418',
   },
-  sectionTitle: {
-    fontSize: 24,
+  header: {
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    backgroundColor: '#19202a',
+  },
+  title: {
+    color: '#ffffff',
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  subtitle: {
+    color: '#a3adbd',
+    marginTop: 4,
+  },
+  actions: {
+    marginTop: 12,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  button: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#26303d',
+  },
+  buttonText: {
+    color: '#f0f4ff',
+    fontSize: 13,
+  },
+  primaryButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#2d74ff',
+  },
+  primaryButtonText: {
+    color: '#ffffff',
     fontWeight: '600',
   },
-  sectionDescription: {
-    marginTop: 8,
-    fontSize: 18,
-    fontWeight: '400',
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  highlight: {
-    fontWeight: '700',
+  errorText: {
+    color: '#ff7b7b',
+    fontSize: 16,
+  },
+  listContent: {
+    padding: 16,
+    gap: 12,
+  },
+  card: {
+    backgroundColor: '#ffffff',
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowOffset: {width: 0, height: 4},
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  name: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  section: {
+    marginTop: 8,
+  },
+  sectionHeader: {
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  row: {
+    fontSize: 14,
+    color: '#3a4756',
+  },
+  meta: {
+    marginTop: 12,
+    fontSize: 12,
+    color: '#74808f',
+  },
+  empty: {
+    textAlign: 'center',
+    color: '#74808f',
+    marginTop: 32,
   },
 });
 
