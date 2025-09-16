@@ -26,7 +26,7 @@ export interface Spec extends TurboModule {
 }
 
 const LINKING_ERROR =
-  `The package '@omarsdev/react-native-contacts-last-updated' doesn't seem to be linked correctly.\n` +
+  `The package 'react-native-contacts-last-updated' doesn't seem to be linked correctly.\n` +
   "Make sure: \n" +
   Platform.select({
     ios: "- You have run 'pod install'\n",

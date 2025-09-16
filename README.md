@@ -5,7 +5,7 @@ Access the device address book and track when contacts were last touched. This p
 ## Installation
 
 ```sh
-yarn add @omarsdev/react-native-contacts-last-updated
+yarn add react-native-contacts-last-updated
 
 # iOS
 cd ios && pod install
@@ -21,7 +21,7 @@ import {
   hasPermission,
   requestPermission,
   type GetOptions,
-} from "@omarsdev/react-native-contacts-last-updated";
+} from "react-native-contacts-last-updated";
 
 async function loadContacts() {
   const status = await requestPermission();
