@@ -37,11 +37,9 @@ static NSString *const kCLUPersistedSinceKey = @"ContactsLastUpdatedPersistedSin
     if (startToken) {
         CNChangeHistoryFetchRequest *ch = [CNChangeHistoryFetchRequest new];
         ch.startingToken = startToken;
-        ch.unifyResults = YES;
-        ch.additionalContactKeyDescriptors = @[CNContactIdentifierKey];
-        BOOL ok = [store enumerateChangeHistoryWithFetchRequest:ch
-                                                         error:&err
-                                                    eventHandler:^(CNChangeHistoryEvent * _Nonnull event, BOOL * _Nonnull stop) {
+        BOOL ok = [store enumerateChangeHistoryForFetchRequest:ch
+                                                        error:&err
+                                                   usingBlock:^(CNChangeHistoryEvent * _Nonnull event, BOOL * _Nonnull stop) {
             if ([event isKindOfClass:[CNChangeHistoryAddContactEvent class]]) {
                 CNChangeHistoryAddContactEvent *e = (CNChangeHistoryAddContactEvent *)event;
                 if (e.contact.identifier) [changedIds addObject:e.contact.identifier];
@@ -177,13 +175,10 @@ static NSString *const kCLUPersistedSinceKey = @"ContactsLastUpdatedPersistedSin
         // Use change history to collect added/updated identifiers
         CNChangeHistoryFetchRequest *ch = [CNChangeHistoryFetchRequest new];
         ch.startingToken = startToken;
-        ch.unifyResults = YES;
-        // Only need identifiers; values will be fetched later
-        ch.additionalContactKeyDescriptors = @[CNContactIdentifierKey];
 
-        BOOL ok = [store enumerateChangeHistoryWithFetchRequest:ch
-                                                         error:&err
-                                                    eventHandler:^(CNChangeHistoryEvent * _Nonnull event, BOOL * _Nonnull stop) {
+        BOOL ok = [store enumerateChangeHistoryForFetchRequest:ch
+                                                        error:&err
+                                                   usingBlock:^(CNChangeHistoryEvent * _Nonnull event, BOOL * _Nonnull stop) {
             // Add contacts changed
             if ([event isKindOfClass:[CNChangeHistoryAddContactEvent class]]) {
                 CNChangeHistoryAddContactEvent *e = (CNChangeHistoryAddContactEvent *)event;
