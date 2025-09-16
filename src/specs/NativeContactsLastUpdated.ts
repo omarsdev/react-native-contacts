@@ -35,7 +35,16 @@ const LINKING_ERROR =
   "- You rebuilt the app after installing the package\n" +
   "- You are not using Expo managed workflow";
 
-const Native: Spec | undefined = globalThis.__turboModuleProxy
+type RNGlobal = typeof globalThis & {
+  __turboModuleProxy?: {
+    getEnforcing<T extends TurboModule>(name: string): T;
+    get<T extends TurboModule>(name: string): T | undefined;
+  };
+};
+
+const globalProxy = globalThis as RNGlobal;
+
+const Native: Spec | undefined = globalProxy.__turboModuleProxy
   ? TurboModuleRegistry.get<Spec>("ContactsLastUpdated")
   : (NativeModules.ContactsLastUpdated as Spec | undefined);
 
