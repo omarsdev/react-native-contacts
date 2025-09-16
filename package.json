@@ -1,0 +1,15 @@
+{
+  "name": "react-native-contacts-last-updated",
+  "version": "0.1.0",
+  "source": "src/index.ts",
+  "react-native": "src/index.ts",
+  "files": [
+    "src",
+    "android",
+    "ios"
+  ],
+  "peerDependencies": {
+    "react": ">=18",
+    "react-native": ">=0.73"
+  }
+}
