@@ -1,4 +1,5 @@
-const {getDefaultConfig, mergeConfig} = require('@react-native/metro-config');
+const path = require('path');
+const {getDefaultConfig} = require('@react-native/metro-config');
 
 /**
  * Metro configuration
@@ -6,6 +7,23 @@ const {getDefaultConfig, mergeConfig} = require('@react-native/metro-config');
  *
  * @type {import('@react-native/metro-config').MetroConfig}
  */
-const config = {};
+const projectRoot = __dirname;
+const packageRoot = path.resolve(__dirname, '..');
 
-module.exports = mergeConfig(getDefaultConfig(__dirname), config);
+const defaultConfig = getDefaultConfig(__dirname);
+
+module.exports = {
+  ...defaultConfig,
+  watchFolders: [...(defaultConfig.watchFolders ?? []), packageRoot],
+  resolver: {
+    ...defaultConfig.resolver,
+    extraNodeModules: {
+      ...(defaultConfig.resolver?.extraNodeModules ?? {}),
+      'react-native-contacts-last-updated': packageRoot,
+      // Ensure modules resolved from the package use the app's copies
+      'react': path.join(projectRoot, 'node_modules/react'),
+      'react-native': path.join(projectRoot, 'node_modules/react-native'),
+      '@babel/runtime': path.join(projectRoot, 'node_modules/@babel/runtime'),
+    },
+  },
+};
