@@ -1,5 +1,6 @@
 import Foundation
 import Contacts
+import React
 
 @objc(ContactsLastUpdated)
 class ContactsLastUpdated: NSObject {
@@ -8,13 +9,13 @@ class ContactsLastUpdated: NSObject {
   private let cache = ContactsLastUpdatedCache()
 
   @objc
-  func hasPermission(_ resolve: RCTPromiseResolveBlock, rejecter reject: RCTPromiseRejectBlock) {
+  func hasPermission(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
     let status = CNContactStore.authorizationStatus(for: .contacts)
     resolve(status == .authorized)
   }
 
   @objc
-  func requestPermission(_ resolve: RCTPromiseResolveBlock, rejecter reject: RCTPromiseRejectBlock) {
+  func requestPermission(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
     store.requestAccess(for: .contacts) { granted, _ in
       resolve(granted ? "granted" : "denied")
     }

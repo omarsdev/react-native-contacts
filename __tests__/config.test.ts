@@ -22,6 +22,15 @@ describe("package metadata", () => {
     expect(podspec).toMatch(/s\.source_files\s*=\s*"ios\/\*\*\/\*\.\{h,m,mm,swift}/);
   });
 
+  it("imports React in the Swift bridge", () => {
+    const bridge = fs.readFileSync(
+      path.join(root, "ios", "ContactsLastUpdatedBridge.swift"),
+      "utf8"
+    );
+    expect(bridge).toMatch(/import React/);
+    expect(bridge).toMatch(/@escaping RCTPromiseResolveBlock/);
+  });
+
   it("exposes an Android ReactPackage", () => {
     const pkgSource = fs.readFileSync(
       path.join(
