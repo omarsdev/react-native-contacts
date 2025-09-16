@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "es2019",
+    "module": "commonjs",
+    "lib": ["es2019"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "declaration": false,
+    "types": ["jest", "node"],
+    "baseUrl": ".",
+    "paths": {
+      "*": ["*", "src/*"]
+    }
+  },
+  "include": ["src/**/*", "src/types/**/*", "__tests__/**/*"]
+}

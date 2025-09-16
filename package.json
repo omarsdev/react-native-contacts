@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "source": "src/index.ts",
   "react-native": "src/index.ts",
+  "scripts": {
+    "test": "jest"
+  },
   "files": [
     "src",
     "android",
@@ -11,5 +14,11 @@
   "peerDependencies": {
     "react": ">=18",
     "react-native": ">=0.73"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.1",
+    "typescript": "^5.2.2"
   }
 }
