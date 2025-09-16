@@ -12,7 +12,9 @@ import {
 } from 'react-native';
 import {
   getAllPaged,
-  getUpdatedSincePaged,
+  getPersistedSince,
+  getUpdatedFromPersistedPaged,
+  commitPersisted,
   type Contact,
 } from 'react-native-contacts-last-updated';
 
@@ -103,6 +105,10 @@ export default function App() {
         );
         setGranted(res === PermissionsAndroid.RESULTS.GRANTED);
       }
+      try {
+        const s = await getPersistedSince();
+        setSince(s || '');
+      } catch {}
     };
     ensurePermission();
   }, []);
@@ -151,14 +157,14 @@ export default function App() {
       const pageSize = 300;
       let offset = 0;
       const acc: Contact[] = [];
-      let nextSince = since;
+      let sessionToken = '';
       for (;;) {
         // eslint-disable-next-line no-await-in-loop
-        const resp = await getUpdatedSincePaged(since, offset, pageSize);
+        const resp = await getUpdatedFromPersistedPaged(offset, pageSize);
         const items = resp.items ?? [];
-        nextSince = resp.nextSince || nextSince;
+        if (!sessionToken) sessionToken = resp.nextSince || '';
         appendLog(
-          `Fetched delta page: offset=${offset} size=${items.length} nextSince=${nextSince}`
+          `Fetched delta page: offset=${offset} size=${items.length} session=${sessionToken}`
         );
         if (items.length === 0) break;
         acc.push(...items);
@@ -166,9 +172,12 @@ export default function App() {
         if (items.length < pageSize) break;
       }
       setDelta(acc);
-      setSince(nextSince);
+      if (sessionToken) {
+        await commitPersisted(sessionToken);
+        setSince(sessionToken);
+      }
       appendLog(
-        `Completed delta fetch. Items=${acc.length} since=${nextSince}`
+        `Completed delta fetch. Items=${acc.length} committedSince=${sessionToken}`
       );
     } catch (e: any) {
       appendLog(`Error: ${e?.message || String(e)}`);

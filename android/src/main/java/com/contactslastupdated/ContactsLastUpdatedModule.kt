@@ -10,6 +10,8 @@ import android.database.Cursor
 import android.net.Uri
 import android.content.ContentResolver
 import android.os.Build
+import android.content.SharedPreferences
+import android.content.Context
 
 @Suppress("unused")
 
@@ -63,6 +65,31 @@ class ContactsLastUpdatedModule(reactContext: ReactApplicationContext) :
     // Use current time as next checkpoint token
     result.putString("nextSince", System.currentTimeMillis().toString())
     return result
+  }
+
+  // Persisted token helpers (store a small timestamp, not contacts)
+  private val prefs: SharedPreferences by lazy {
+    reactApplicationContext.getSharedPreferences("ContactsLastUpdatedPrefs", Context.MODE_PRIVATE)
+  }
+
+  override fun getPersistedSince(): String {
+    return prefs.getLong("since", 0L).toString()
+  }
+
+  override fun getUpdatedFromPersisted(offset: Double, limit: Double): WritableMap {
+    val off = offset.toInt().coerceAtLeast(0)
+    val lim = limit.toInt().coerceAtLeast(0)
+    val start = prefs.getLong("since", 0L)
+    val contacts = if (lim > 0) queryContacts(off, lim, start) else emptyList()
+    val map = Arguments.createMap()
+    map.putArray("items", contactsToWritableArray(contacts))
+    map.putString("nextSince", System.currentTimeMillis().toString())
+    return map
+  }
+
+  override fun commitPersisted(nextSince: String) {
+    val v = nextSince.toLongOrNull() ?: return
+    prefs.edit().putLong("since", v).apply()
   }
 
   private fun queryContacts(offset: Int, limit: Int, sinceMs: Long?): List<Contact> {

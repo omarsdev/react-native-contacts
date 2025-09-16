@@ -21,6 +21,19 @@ export function getUpdatedSincePaged(
   return ContactsLastUpdated.getUpdatedSince(since, offset, limit);
 }
 
+// Persisted-delta helpers
+export function getPersistedSince() {
+  return ContactsLastUpdated.getPersistedSince();
+}
+
+export function getUpdatedFromPersistedPaged(offset: number, limit: number) {
+  return ContactsLastUpdated.getUpdatedFromPersisted(offset, limit);
+}
+
+export function commitPersisted(nextSince: string) {
+  return ContactsLastUpdated.commitPersisted(nextSince);
+}
+
 // Convenience: stream all contacts in chunks. Yields arrays of contacts.
 export async function* streamAll(pageSize = 200) {
   let offset = 0;
@@ -34,20 +47,14 @@ export async function* streamAll(pageSize = 200) {
 }
 
 // Convenience: stream updated contacts in chunks. Yields arrays of contacts and returns final token.
-export async function* streamUpdatedSince(
-  since: string,
-  pageSize = 200
-): AsyncGenerator<{ items: import('./NativeContactsLastUpdated').Contact[] }, string, void> {
+export async function* streamUpdatedSince(since: string, pageSize = 200) {
   let offset = 0;
   let nextSince = since;
   // We keep the same `since` across pages; only adopt `nextSince` after finishing all pages
   while (true) {
     // eslint-disable-next-line no-await-in-loop
-    const { items, nextSince: proposed } = await ContactsLastUpdated.getUpdatedSince(
-      since,
-      offset,
-      pageSize
-    );
+    const { items, nextSince: proposed } =
+      await ContactsLastUpdated.getUpdatedSince(since, offset, pageSize);
     if (!items || items.length === 0) {
       nextSince = proposed || nextSince;
       break;
@@ -57,4 +64,22 @@ export async function* streamUpdatedSince(
     nextSince = proposed || nextSince;
   }
   return nextSince;
+}
+
+// Convenience: stream delta using native-persisted token. Returns final token committed.
+export async function* streamUpdatedFromPersisted(pageSize = 200) {
+  let offset = 0;
+  let sessionToken: string | undefined;
+  while (true) {
+    // eslint-disable-next-line no-await-in-loop
+    const { items, nextSince } =
+      await ContactsLastUpdated.getUpdatedFromPersisted(offset, pageSize);
+    if (sessionToken == null) sessionToken = nextSince;
+    if (!items || items.length === 0) break;
+    yield { items } as any;
+    offset += items.length;
+    if (items.length < pageSize) break;
+  }
+  if (sessionToken) ContactsLastUpdated.commitPersisted(sessionToken);
+  return sessionToken || (await ContactsLastUpdated.getPersistedSince());
 }

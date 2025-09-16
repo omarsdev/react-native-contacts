@@ -27,6 +27,14 @@ export interface Spec extends TurboModule {
     offset: number,
     limit: number
   ): { items: Contact[]; nextSince: string };
+
+  // Persisted-delta helpers (native keeps a small token, not contacts)
+  getPersistedSince(): string;
+  getUpdatedFromPersisted(
+    offset: number,
+    limit: number
+  ): { items: Contact[]; nextSince: string };
+  commitPersisted(nextSince: string): void;
 }
 
 export default TurboModuleRegistry.getEnforcing<Spec>('ContactsLastUpdated');
