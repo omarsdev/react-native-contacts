@@ -76,6 +76,34 @@ describe("Native module resolution", () => {
     });
   });
 
+  it("falls back to NativeModules when TurboModule registry returns undefined", () => {
+    const fakeNative = createNativeMock();
+    const getMock = jest.fn(() => undefined) as unknown as TurboProxy["get"];
+
+    const getEnforcingMock = jest.fn() as unknown as TurboProxy["getEnforcing"];
+
+    (globalThis as RNTestGlobal).__turboModuleProxy = {
+      get: getMock,
+      getEnforcing: getEnforcingMock,
+    };
+
+    jest.doMock(
+      "react-native",
+      () => ({
+        TurboModuleRegistry: { get: getMock, getEnforcing: getEnforcingMock },
+        NativeModules: { ContactsLastUpdated: fakeNative },
+        Platform: { select: jest.fn(() => undefined) },
+      }),
+      { virtual: true }
+    );
+
+    jest.isolateModules(() => {
+      const Native = require("../src/specs/NativeContactsLastUpdated").default as Spec;
+      expect(Native).toBe(fakeNative);
+      expect(getMock).toHaveBeenCalledWith("ContactsLastUpdated");
+    });
+  });
+
   it("throws a helpful error when the native module is unavailable", () => {
     delete (globalThis as RNTestGlobal).__turboModuleProxy;
 

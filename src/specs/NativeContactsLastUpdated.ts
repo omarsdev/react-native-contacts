@@ -44,9 +44,12 @@ type RNGlobal = typeof globalThis & {
 
 const globalProxy = globalThis as RNGlobal;
 
-const Native: Spec | undefined = globalProxy.__turboModuleProxy
+const turboModule = globalProxy.__turboModuleProxy
   ? TurboModuleRegistry.get<Spec>("ContactsLastUpdated")
-  : (NativeModules.ContactsLastUpdated as Spec | undefined);
+  : undefined;
+
+const Native: Spec | undefined =
+  turboModule ?? (NativeModules.ContactsLastUpdated as Spec | undefined);
 
 if (!Native) {
   throw new Error(LINKING_ERROR);
