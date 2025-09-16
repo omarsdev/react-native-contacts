@@ -11,7 +11,7 @@
     "url": "git+https://github.com/omarsdev/react-native-contacts-last-updated.git"
   },
   "license": "ISC",
-  "author": "Omar S.",
+  "author": "omarsdev (https://omars.dev)",
   "type": "commonjs",
   "main": "src/index.ts",
   "types": "src/index.ts",
