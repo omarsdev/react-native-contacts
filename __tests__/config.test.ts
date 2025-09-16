@@ -1,25 +1,41 @@
 import fs from "fs";
 import path from "path";
 
-describe("react-native config", () => {
-  it("exposes podspec path and android package", () => {
-    const config = require("../react-native.config.js");
-    expect(config).toHaveProperty("dependency.platforms.ios.podspec");
-    expect(config).toHaveProperty("dependency.platforms.android.packageImportPath", "com.contactsupdated.ContactsLastUpdatedPackage");
-    expect(config).toHaveProperty("dependency.platforms.android.packageInstance", "new ContactsLastUpdatedPackage()");
+describe("package metadata", () => {
+  const root = path.resolve(__dirname, "..");
 
-    const podspecPath = config.dependency.platforms.ios.podspec as string;
-    const resolved = path.resolve(__dirname, "..", podspecPath);
-    expect(fs.existsSync(resolved)).toBe(true);
-  });
-
-  it("includes podspec and config in published files", () => {
+  it("ships the podspec in the published files", () => {
     const pkg = require("../package.json");
     expect(pkg.files).toEqual(
-      expect.arrayContaining([
-        "react-native-contacts-last-updated.podspec",
-        "react-native.config.js",
-      ])
+      expect.arrayContaining(["react-native-contacts-last-updated.podspec"])
     );
+    expect(pkg.files).not.toEqual(
+      expect.arrayContaining(["react-native.config.js"])
+    );
+  });
+
+  it("defines iOS sources in the podspec", () => {
+    const podspec = fs.readFileSync(
+      path.join(root, "react-native-contacts-last-updated.podspec"),
+      "utf8"
+    );
+    expect(podspec).toMatch(/s\.source_files\s*=\s*"ios\/\*\*\/\*\.\{h,m,mm,swift}/);
+  });
+
+  it("exposes an Android ReactPackage", () => {
+    const pkgSource = fs.readFileSync(
+      path.join(
+        root,
+        "android",
+        "src",
+        "main",
+        "java",
+        "com",
+        "contactsupdated",
+        "ContactsLastUpdatedPackage.kt"
+      ),
+      "utf8"
+    );
+    expect(pkgSource).toContain("class ContactsLastUpdatedPackage : ReactPackage");
   });
 });
