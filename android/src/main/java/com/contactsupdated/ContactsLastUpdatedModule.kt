@@ -8,20 +8,24 @@ import androidx.core.content.ContextCompat
 import com.facebook.react.bridge.*
 import com.facebook.react.module.annotations.ReactModule
 
-@ReactModule(name = "ContactsLastUpdated")
-class ContactsLastUpdatedModule(private val reactContext: ReactApplicationContext) :
-  ReactContextBaseJavaModule(reactContext) {
+@ReactModule(name = ContactsLastUpdatedModule.NAME)
+class ContactsLastUpdatedModule(reactContext: ReactApplicationContext) :
+  NativeContactsLastUpdatedSpec(reactContext) {
 
-  override fun getName() = "ContactsLastUpdated"
+  companion object {
+    const val NAME = "ContactsLastUpdated"
+  }
+
+  override fun getName() = NAME
 
   @ReactMethod
-  fun hasPermission(promise: Promise) {
+  override fun hasPermission(promise: Promise) {
     val granted = ContextCompat.checkSelfPermission(reactContext, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
     promise.resolve(granted)
   }
 
   @ReactMethod
-  fun requestPermission(promise: Promise) {
+  override fun requestPermission(promise: Promise) {
     // Delegate permission request to JS (PermissionsAndroid).
     // Return current state for convenience.
     val granted = ContextCompat.checkSelfPermission(reactContext, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
@@ -29,7 +33,7 @@ class ContactsLastUpdatedModule(private val reactContext: ReactApplicationContex
   }
 
   @ReactMethod
-  fun getContactsSortedByLastUpdated(options: ReadableMap?, promise: Promise) {
+  override fun getContactsSortedByLastUpdated(options: ReadableMap?, promise: Promise) {
     try {
       val hasPerm = ContextCompat.checkSelfPermission(reactContext, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
       if (!hasPerm) { promise.reject("E_NO_PERMISSION", "READ_CONTACTS not granted"); return }

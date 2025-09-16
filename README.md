@@ -9,7 +9,6 @@ yarn add react-native-contacts-last-updated
 
 # iOS
 cd ios && pod install
-# If your project relies on Bundler, run `bundle install` first.
 ```
 
 Rebuild your app after installing. The module automatically uses the TurboModule bridge when it is available, and falls back to the classic `NativeModules` bridge otherwise.

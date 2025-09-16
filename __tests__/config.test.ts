@@ -47,4 +47,22 @@ describe("package metadata", () => {
     );
     expect(pkgSource).toContain("class ContactsLastUpdatedPackage : ReactPackage");
   });
+
+  it("implements the TurboModule spec on Android", () => {
+    const specSource = fs.readFileSync(
+      path.join(
+        root,
+        "android",
+        "src",
+        "main",
+        "java",
+        "com",
+        "contactsupdated",
+        "NativeContactsLastUpdatedSpec.kt"
+      ),
+      "utf8"
+    );
+    expect(specSource).toContain("ReactModuleWithSpec");
+    expect(specSource).toContain("TurboModule");
+  });
 });
