@@ -1,6 +1,9 @@
 package com.contactslastupdated
 
 import com.facebook.react.bridge.ReactApplicationContext
+import com.facebook.react.bridge.Arguments
+import com.facebook.react.bridge.WritableArray
+import com.facebook.react.bridge.WritableMap
 import com.facebook.react.module.annotations.ReactModule
 import android.provider.ContactsContract
 import android.database.Cursor
@@ -32,26 +35,33 @@ class ContactsLastUpdatedModule(reactContext: ReactApplicationContext) :
     val lastUpdatedAt: Long?
   )
 
-  override fun getAll(offset: Double, limit: Double): MutableList<MutableMap<String, Any?>> {
+  override fun getAll(offset: Double, limit: Double): WritableArray {
     val off = offset.toInt().coerceAtLeast(0)
     val lim = limit.toInt().coerceAtLeast(0)
+    if (lim <= 0) return Arguments.createArray()
     val contacts = queryContacts(off, lim, null)
-    return contactsToReturnList(contacts)
+    return contactsToWritableArray(contacts)
   }
 
   override fun getUpdatedSince(
     since: String,
     offset: Double,
     limit: Double
-  ): MutableMap<String, Any?> {
+  ): WritableMap {
     val off = offset.toInt().coerceAtLeast(0)
     val lim = limit.toInt().coerceAtLeast(0)
+    if (lim <= 0) {
+      val map = Arguments.createMap()
+      map.putArray("items", Arguments.createArray())
+      map.putString("nextSince", System.currentTimeMillis().toString())
+      return map
+    }
     val sinceMs = since.toLongOrNull() ?: 0L
     val contacts = queryContacts(off, lim, sinceMs)
-    val result: MutableMap<String, Any?> = HashMap()
-    result["items"] = contactsToReturnList(contacts)
+    val result = Arguments.createMap()
+    result.putArray("items", contactsToWritableArray(contacts))
     // Use current time as next checkpoint token
-    result["nextSince"] = System.currentTimeMillis().toString()
+    result.putString("nextSince", System.currentTimeMillis().toString())
     return result
   }
 
@@ -80,10 +90,8 @@ class ContactsLastUpdatedModule(reactContext: ReactApplicationContext) :
     val items = ArrayList<Contact>(limit)
     val cursor: Cursor? = cr.query(uri, projection, selection, selectionArgs, sortOrder)
     cursor?.use { c ->
-      if (offset > 0) {
-        if (!c.moveToPosition(offset)) {
-          return emptyList()
-        }
+      if (!c.moveToPosition(offset)) {
+        return emptyList()
       }
       var count = 0
       do {
@@ -118,19 +126,21 @@ class ContactsLastUpdatedModule(reactContext: ReactApplicationContext) :
     return numbers
   }
 
-  private fun contactsToReturnList(contacts: List<Contact>): MutableList<MutableMap<String, Any?>> {
-    val list: MutableList<MutableMap<String, Any?>> = ArrayList(contacts.size)
+  private fun contactsToWritableArray(contacts: List<Contact>): WritableArray {
+    val array = Arguments.createArray()
     for (c in contacts) {
-      val map: MutableMap<String, Any?> = HashMap()
-      map["id"] = c.id
-      map["displayName"] = c.displayName
-      map["phoneNumbers"] = c.phoneNumbers
-      map["givenName"] = null
-      map["familyName"] = null
-      map["lastUpdatedAt"] = c.lastUpdatedAt
-      list.add(map)
+      val map = Arguments.createMap()
+      map.putString("id", c.id)
+      map.putString("displayName", c.displayName)
+      val phones = Arguments.createArray()
+      for (p in c.phoneNumbers) phones.pushString(p)
+      map.putArray("phoneNumbers", phones)
+      map.putNull("givenName")
+      map.putNull("familyName")
+      if (c.lastUpdatedAt != null) map.putDouble("lastUpdatedAt", c.lastUpdatedAt.toDouble()) else map.putNull("lastUpdatedAt")
+      array.pushMap(map)
     }
-    return list
+    return array
   }
 
   companion object {
