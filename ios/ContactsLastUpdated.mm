@@ -298,7 +298,13 @@ static void CLURebuildSnapshot(CNContactStore *store) {
 
     NSData *newToken = store.currentHistoryToken;
     NSString *nextSince = newToken != nil ? [newToken base64EncodedStringWithOptions:0] : @"";
-    return @{ @"items": items, @"nextSince": nextSince ?: @"" };
+    // Ensure forward progress: if token didn't change or is empty, synthesize a fallback token
+    NSString *persisted = [[NSUserDefaults standardUserDefaults] stringForKey:kCLUPersistedSinceKey] ?: @"";
+    if (nextSince.length == 0 || [nextSince isEqualToString:persisted]) {
+        long long ms = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
+        nextSince = [NSString stringWithFormat:@"fp:%lld", ms];
+    }
+    return @{ @"items": items, @"nextSince": nextSince };
 }
 
 - (void)commitPersisted:(NSString *)nextSince
@@ -457,7 +463,11 @@ static void CLURebuildSnapshot(CNContactStore *store) {
     // Provide the current token to persist after finishing all pages
     NSData *newToken = store.currentHistoryToken;
     NSString *nextSince = newToken != nil ? [newToken base64EncodedStringWithOptions:0] : @"";
-    return @{ @"items": items, @"nextSince": nextSince ?: @"" };
+    if (nextSince.length == 0 || (since != nil && [since isKindOfClass:[NSString class]] && [nextSince isEqualToString:since])) {
+        long long ms = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
+        nextSince = [NSString stringWithFormat:@"fp:%lld", ms];
+    }
+    return @{ @"items": items, @"nextSince": nextSince };
 }
 
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:
