@@ -48,3 +48,14 @@ yarn test
 ```
 
 The tests simulate both TurboModule and `NativeModules` environments and assert that missing native bindings surface the helpful linking error.
+
+## Continuous delivery
+
+Merges to `develop` trigger the `Publish Package` GitHub Action, which:
+
+- installs dependencies and runs the Jest suite
+- bumps the package version with `npm version patch`
+- publishes the build to GitHub Packages
+- pushes the updated version and tag back to `develop`
+
+Before the workflow can publish, add a repository secret named `GITHUB_PACKAGES_TOKEN` that contains a GitHub personal access token with `write:packages` and `read:packages` scopes (include `delete:packages` if you expect to remove releases). The workflow injects this token into `npm publish` via the `NODE_AUTH_TOKEN` environment variable.
