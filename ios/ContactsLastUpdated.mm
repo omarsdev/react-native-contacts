@@ -12,6 +12,122 @@ RCT_EXPORT_MODULE()
 }
 
 static NSString *const kCLUPersistedSinceKey = @"ContactsLastUpdatedPersistedSince";
+static NSString *const kCLUSnapshotDirName = @"ContactsLastUpdated";
+static NSString *const kCLUSnapshotFileName = @"fp.plist";
+
+// Cache last computed delta for paging
+static NSArray<NSDictionary *> *gCLU_LastDeltaItems = nil;
+
+// Simple 64-bit FNV-1a hash for compact fingerprints
+static uint64_t CLUFNV1a64(const void *data, size_t len) {
+    const uint8_t *bytes = (const uint8_t *)data;
+    uint64_t hash = 1469598103934665603ULL; // offset basis
+    for (size_t i = 0; i < len; i++) {
+        hash ^= bytes[i];
+        hash *= 1099511628211ULL; // FNV prime
+    }
+    return hash;
+}
+
+static uint64_t CLUHashString(NSString *s) {
+    if (!s) return 0;
+    NSData *d = [s dataUsingEncoding:NSUTF8StringEncoding];
+    return CLUFNV1a64(d.bytes, d.length);
+}
+
+static NSString *CLUNormalizePhone(NSString *p) {
+    if (!p) return @"";
+    NSCharacterSet *nonDigits = [[NSCharacterSet decimalDigitCharacterSet] invertedSet];
+    return [[p componentsSeparatedByCharactersInSet:nonDigits] componentsJoinedByString:@""];
+}
+
+static uint64_t CLUContactFingerprint(CNContact *c) {
+    NSMutableArray<NSString *> *parts = [NSMutableArray arrayWithCapacity:6];
+    if (c.givenName) [parts addObject:c.givenName];
+    if (c.familyName) [parts addObject:c.familyName];
+    if ([c isKeyAvailable:CNContactPhoneNumbersKey]) {
+        NSMutableArray<NSString *> *phones = [NSMutableArray arrayWithCapacity:c.phoneNumbers.count];
+        for (CNLabeledValue<CNPhoneNumber *> *lv in c.phoneNumbers) {
+            CNPhoneNumber *pn = lv.value;
+            if (pn.stringValue) [phones addObject:CLUNormalizePhone(pn.stringValue)];
+        }
+        [phones sortUsingSelector:@selector(compare:)];
+        [parts addObject:[phones componentsJoinedByString:@","]];
+    }
+    NSString *joined = [parts componentsJoinedByString:@"|"];
+    return CLUHashString(joined.lowercaseString);
+}
+
+static NSString *CLUSnapshotPath(void) {
+    NSArray<NSString *> *paths = NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES);
+    NSString *dir = paths.firstObject ?: NSTemporaryDirectory();
+    NSString *folder = [dir stringByAppendingPathComponent:kCLUSnapshotDirName];
+    [[NSFileManager defaultManager] createDirectoryAtPath:folder withIntermediateDirectories:YES attributes:nil error:nil];
+    return [folder stringByAppendingPathComponent:kCLUSnapshotFileName];
+}
+
+static NSMutableDictionary<NSString *, NSNumber *> *CLULoadSnapshot(void) {
+    NSDictionary *d = [NSDictionary dictionaryWithContentsOfFile:CLUSnapshotPath()];
+    if ([d isKindOfClass:[NSDictionary class]]) return [d mutableCopy];
+    return [NSMutableDictionary new];
+}
+
+static void CLUSaveSnapshot(NSDictionary<NSString *, NSNumber *> *snapshot) {
+    if (!snapshot) return;
+    [snapshot writeToFile:CLUSnapshotPath() atomically:YES];
+}
+
+static NSString *CLUDisplayName(CNContact *c) {
+    NSString *g = c.givenName ?: @"";
+    NSString *f = c.familyName ?: @"";
+    if (g.length > 0 && f.length > 0) return [NSString stringWithFormat:@"%@ %@", g, f];
+    return g.length > 0 ? g : f;
+}
+
+static NSDictionary *CLUContactToDict(CNContact *c) {
+    NSMutableArray *phones = [NSMutableArray new];
+    for (CNLabeledValue<CNPhoneNumber *> *lv in c.phoneNumbers) {
+        CNPhoneNumber *pn = lv.value;
+        if (pn.stringValue) [phones addObject:pn.stringValue];
+    }
+    return @{
+        @"id": c.identifier ?: @"",
+        @"displayName": CLUDisplayName(c) ?: @"",
+        @"phoneNumbers": phones,
+        @"givenName": c.givenName ?: [NSNull null],
+        @"familyName": c.familyName ?: [NSNull null],
+        @"lastUpdatedAt": [NSNull null],
+    };
+}
+
+static NSArray<NSDictionary *> *CLUComputeDeltaContacts(CNContactStore *store, NSDictionary<NSString *, NSNumber *> *snapshot) {
+    if (!snapshot || snapshot.count == 0) return @[]; // first run: no delta
+    NSError *err = nil;
+    NSArray *keys = @[CNContactIdentifierKey, CNContactGivenNameKey, CNContactFamilyNameKey, CNContactPhoneNumbersKey];
+    CNContactFetchRequest *req = [[CNContactFetchRequest alloc] initWithKeysToFetch:keys];
+    NSMutableArray<NSDictionary *> *changed = [NSMutableArray array];
+    BOOL ok = [store enumerateContactsWithFetchRequest:req error:&err usingBlock:^(CNContact * _Nonnull contact, BOOL * _Nonnull stop) {
+        NSNumber *prev = snapshot[contact.identifier ?: @""];
+        uint64_t fp = CLUContactFingerprint(contact);
+        if (!prev || prev.unsignedLongLongValue != fp) {
+            [changed addObject:CLUContactToDict(contact)];
+        }
+    }];
+    if (!ok || err) return @[];
+    return changed;
+}
+
+static void CLURebuildSnapshot(CNContactStore *store) {
+    NSError *err = nil;
+    NSArray *keys = @[CNContactIdentifierKey, CNContactGivenNameKey, CNContactFamilyNameKey, CNContactPhoneNumbersKey];
+    CNContactFetchRequest *req = [[CNContactFetchRequest alloc] initWithKeysToFetch:keys];
+    NSMutableDictionary<NSString *, NSNumber *> *snap = [NSMutableDictionary dictionary];
+    [store enumerateContactsWithFetchRequest:req error:&err usingBlock:^(CNContact * _Nonnull contact, BOOL * _Nonnull stop) {
+        uint64_t fp = CLUContactFingerprint(contact);
+        snap[contact.identifier ?: @""] = @(fp);
+    }];
+    if (!err) CLUSaveSnapshot(snap);
+}
 
 // Helper: enumerate change history via whichever selector is available on this SDK.
 - (BOOL)clu_enumerateChangeHistoryInStore:(CNContactStore *)store
@@ -123,7 +239,15 @@ static NSString *const kCLUPersistedSinceKey = @"ContactsLastUpdatedPersistedSin
             } @catch (...) {}
         }];
         if (!ok || err) {
-            return @{ @"items": @[], @"nextSince": @"" };
+            // Fallback: compute fingerprint delta vs snapshot
+            if (off == 0 || gCLU_LastDeltaItems == nil) {
+                gCLU_LastDeltaItems = CLUComputeDeltaContacts(store, CLULoadSnapshot());
+            }
+            NSInteger end = MIN((NSInteger)gCLU_LastDeltaItems.count, off + lim);
+            NSArray *page = (off < end) ? [gCLU_LastDeltaItems subarrayWithRange:NSMakeRange(off, end - off)] : @[];
+            NSData *newToken = store.currentHistoryToken;
+            NSString *nextSince = newToken != nil ? [newToken base64EncodedStringWithOptions:0] : @"";
+            return @{ @"items": page, @"nextSince": nextSince ?: @"" };
         }
     }
 
@@ -162,6 +286,14 @@ static NSString *const kCLUPersistedSinceKey = @"ContactsLastUpdatedPersistedSin
                 }
             }
         }
+    } else {
+        // No change-history events — fallback to fingerprint delta snapshot
+        if (off == 0 || gCLU_LastDeltaItems == nil) {
+            gCLU_LastDeltaItems = CLUComputeDeltaContacts(store, CLULoadSnapshot());
+        }
+        NSInteger end = MIN((NSInteger)gCLU_LastDeltaItems.count, off + lim);
+        NSArray *page = (off < end) ? [gCLU_LastDeltaItems subarrayWithRange:NSMakeRange(off, end - off)] : @[];
+        [items addObjectsFromArray:page];
     }
 
     NSData *newToken = store.currentHistoryToken;
@@ -174,6 +306,10 @@ static NSString *const kCLUPersistedSinceKey = @"ContactsLastUpdatedPersistedSin
     if (nextSince == nil) return;
     [[NSUserDefaults standardUserDefaults] setObject:nextSince forKey:kCLUPersistedSinceKey];
     [[NSUserDefaults standardUserDefaults] synchronize];
+    // Rebuild snapshot after committing to advance baseline
+    CNContactStore *store = [CNContactStore new];
+    CLURebuildSnapshot(store);
+    gCLU_LastDeltaItems = nil;
 }
 
 // Paged full fetch. iOS cannot sort by last updated (not exposed),
