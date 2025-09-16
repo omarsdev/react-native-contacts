@@ -98,9 +98,17 @@ static NSString *const kCLUPersistedSinceKey = @"ContactsLastUpdatedPersistedSin
                 if (e.contact.identifier) [changedIds addObject:e.contact.identifier];
             } else if ([event isKindOfClass:[CNChangeHistoryUpdateContactEvent class]]) {
                 CNChangeHistoryUpdateContactEvent *e = (CNChangeHistoryUpdateContactEvent *)event;
-                NSString *identifier = nil;
-                @try { identifier = [e valueForKey:@"contactIdentifier"]; } @catch (...) { identifier = nil; }
+                NSString *identifier = e.contactIdentifier;
                 if (identifier.length > 0) [changedIds addObject:identifier];
+            } else if ([event isKindOfClass:[CNChangeHistoryDeleteContactEvent class]]) {
+                CNChangeHistoryDeleteContactEvent *e = (CNChangeHistoryDeleteContactEvent *)event;
+                if (e.contactIdentifier.length > 0) [changedIds addObject:e.contactIdentifier];
+            } else if ([event isKindOfClass:[CNChangeHistoryLinkContactsEvent class]]) {
+                CNChangeHistoryLinkContactsEvent *e = (CNChangeHistoryLinkContactsEvent *)event;
+                for (NSString *cid in e.contactIdentifiers) { if (cid.length > 0) [changedIds addObject:cid]; }
+            } else if ([event isKindOfClass:[CNChangeHistoryUnlinkContactEvent class]]) {
+                CNChangeHistoryUnlinkContactEvent *e = (CNChangeHistoryUnlinkContactEvent *)event;
+                for (NSString *cid in e.contactIdentifiers) { if (cid.length > 0) [changedIds addObject:cid]; }
             }
         }];
         if (!ok || err) {
@@ -237,9 +245,17 @@ static NSString *const kCLUPersistedSinceKey = @"ContactsLastUpdatedPersistedSin
                 if (e.contact.identifier) [changedIds addObject:e.contact.identifier];
             } else if ([event isKindOfClass:[CNChangeHistoryUpdateContactEvent class]]) {
                 CNChangeHistoryUpdateContactEvent *e = (CNChangeHistoryUpdateContactEvent *)event;
-                NSString *identifier = nil;
-                @try { identifier = [e valueForKey:@"contactIdentifier"]; } @catch (...) { identifier = nil; }
+                NSString *identifier = e.contactIdentifier;
                 if (identifier.length > 0) [changedIds addObject:identifier];
+            } else if ([event isKindOfClass:[CNChangeHistoryDeleteContactEvent class]]) {
+                CNChangeHistoryDeleteContactEvent *e = (CNChangeHistoryDeleteContactEvent *)event;
+                if (e.contactIdentifier.length > 0) [changedIds addObject:e.contactIdentifier];
+            } else if ([event isKindOfClass:[CNChangeHistoryLinkContactsEvent class]]) {
+                CNChangeHistoryLinkContactsEvent *e = (CNChangeHistoryLinkContactsEvent *)event;
+                for (NSString *cid in e.contactIdentifiers) { if (cid.length > 0) [changedIds addObject:cid]; }
+            } else if ([event isKindOfClass:[CNChangeHistoryUnlinkContactEvent class]]) {
+                CNChangeHistoryUnlinkContactEvent *e = (CNChangeHistoryUnlinkContactEvent *)event;
+                for (NSString *cid in e.contactIdentifiers) { if (cid.length > 0) [changedIds addObject:cid]; }
             }
         }];
         if (!ok || err) {
