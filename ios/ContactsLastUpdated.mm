@@ -93,23 +93,29 @@ static NSString *const kCLUPersistedSinceKey = @"ContactsLastUpdatedPersistedSin
         BOOL ok = [self clu_enumerateChangeHistoryInStore:store
                                                startToken:startToken
                                               usingBlock:^(CNChangeHistoryEvent * _Nonnull event, BOOL * _Nonnull stop) {
-            if ([event isKindOfClass:[CNChangeHistoryAddContactEvent class]]) {
-                CNChangeHistoryAddContactEvent *e = (CNChangeHistoryAddContactEvent *)event;
-                if (e.contact.identifier) [changedIds addObject:e.contact.identifier];
-            } else if ([event isKindOfClass:[CNChangeHistoryUpdateContactEvent class]]) {
-                CNChangeHistoryUpdateContactEvent *e = (CNChangeHistoryUpdateContactEvent *)event;
-                NSString *identifier = e.contactIdentifier;
-                if (identifier.length > 0) [changedIds addObject:identifier];
-            } else if ([event isKindOfClass:[CNChangeHistoryDeleteContactEvent class]]) {
-                CNChangeHistoryDeleteContactEvent *e = (CNChangeHistoryDeleteContactEvent *)event;
-                if (e.contactIdentifier.length > 0) [changedIds addObject:e.contactIdentifier];
-            } else if ([event isKindOfClass:[CNChangeHistoryLinkContactsEvent class]]) {
-                CNChangeHistoryLinkContactsEvent *e = (CNChangeHistoryLinkContactsEvent *)event;
-                for (NSString *cid in e.contactIdentifiers) { if (cid.length > 0) [changedIds addObject:cid]; }
-            } else if ([event isKindOfClass:[CNChangeHistoryUnlinkContactEvent class]]) {
-                CNChangeHistoryUnlinkContactEvent *e = (CNChangeHistoryUnlinkContactEvent *)event;
-                for (NSString *cid in e.contactIdentifiers) { if (cid.length > 0) [changedIds addObject:cid]; }
-            }
+            // Collect identifiers in a SDK-agnostic way using KVC to avoid hard dependencies
+            @try {
+                id contact = [event valueForKey:@"contact"]; // may exist for Add events
+                if (contact) {
+                    NSString *cid = nil;
+                    @try { cid = [contact valueForKey:@"identifier"]; } @catch (...) { cid = nil; }
+                    if (cid.length > 0) { [changedIds addObject:cid]; return; }
+                }
+            } @catch (...) {}
+            @try {
+                NSString *cid = [event valueForKey:@"contactIdentifier"]; // for Update/Delete events
+                if (cid.length > 0) { [changedIds addObject:cid]; return; }
+            } @catch (...) {}
+            @try {
+                NSArray *cids = [event valueForKey:@"contactIdentifiers"]; // for Link/Unlink
+                if ([cids isKindOfClass:[NSArray class]]) {
+                    for (id obj in cids) {
+                        if ([obj isKindOfClass:[NSString class]] && [obj length] > 0) {
+                            [changedIds addObject:(NSString *)obj];
+                        }
+                    }
+                }
+            } @catch (...) {}
         }];
         if (!ok || err) {
             return @{ @"items": @[], @"nextSince": @"" };
@@ -239,24 +245,29 @@ static NSString *const kCLUPersistedSinceKey = @"ContactsLastUpdatedPersistedSin
         BOOL ok = [self clu_enumerateChangeHistoryInStore:store
                                                startToken:startToken
                                               usingBlock:^(CNChangeHistoryEvent * _Nonnull event, BOOL * _Nonnull stop) {
-            // Add contacts changed
-            if ([event isKindOfClass:[CNChangeHistoryAddContactEvent class]]) {
-                CNChangeHistoryAddContactEvent *e = (CNChangeHistoryAddContactEvent *)event;
-                if (e.contact.identifier) [changedIds addObject:e.contact.identifier];
-            } else if ([event isKindOfClass:[CNChangeHistoryUpdateContactEvent class]]) {
-                CNChangeHistoryUpdateContactEvent *e = (CNChangeHistoryUpdateContactEvent *)event;
-                NSString *identifier = e.contactIdentifier;
-                if (identifier.length > 0) [changedIds addObject:identifier];
-            } else if ([event isKindOfClass:[CNChangeHistoryDeleteContactEvent class]]) {
-                CNChangeHistoryDeleteContactEvent *e = (CNChangeHistoryDeleteContactEvent *)event;
-                if (e.contactIdentifier.length > 0) [changedIds addObject:e.contactIdentifier];
-            } else if ([event isKindOfClass:[CNChangeHistoryLinkContactsEvent class]]) {
-                CNChangeHistoryLinkContactsEvent *e = (CNChangeHistoryLinkContactsEvent *)event;
-                for (NSString *cid in e.contactIdentifiers) { if (cid.length > 0) [changedIds addObject:cid]; }
-            } else if ([event isKindOfClass:[CNChangeHistoryUnlinkContactEvent class]]) {
-                CNChangeHistoryUnlinkContactEvent *e = (CNChangeHistoryUnlinkContactEvent *)event;
-                for (NSString *cid in e.contactIdentifiers) { if (cid.length > 0) [changedIds addObject:cid]; }
-            }
+            // Collect identifiers in a SDK-agnostic way using KVC to avoid hard dependencies
+            @try {
+                id contact = [event valueForKey:@"contact"]; // may exist for Add events
+                if (contact) {
+                    NSString *cid = nil;
+                    @try { cid = [contact valueForKey:@"identifier"]; } @catch (...) { cid = nil; }
+                    if (cid.length > 0) { [changedIds addObject:cid]; return; }
+                }
+            } @catch (...) {}
+            @try {
+                NSString *cid = [event valueForKey:@"contactIdentifier"]; // for Update/Delete events
+                if (cid.length > 0) { [changedIds addObject:cid]; return; }
+            } @catch (...) {}
+            @try {
+                NSArray *cids = [event valueForKey:@"contactIdentifiers"]; // for Link/Unlink
+                if ([cids isKindOfClass:[NSArray class]]) {
+                    for (id obj in cids) {
+                        if ([obj isKindOfClass:[NSString class]] && [obj length] > 0) {
+                            [changedIds addObject:(NSString *)obj];
+                        }
+                    }
+                }
+            } @catch (...) {}
         }];
         if (!ok || err) {
             return @{ @"items": @[], @"nextSince": @"" };
