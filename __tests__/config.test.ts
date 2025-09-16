@@ -12,4 +12,14 @@ describe("react-native config", () => {
     const resolved = path.resolve(__dirname, "..", podspecPath);
     expect(fs.existsSync(resolved)).toBe(true);
   });
+
+  it("includes podspec and config in published files", () => {
+    const pkg = require("../package.json");
+    expect(pkg.files).toEqual(
+      expect.arrayContaining([
+        "react-native-contacts-last-updated.podspec",
+        "react-native.config.js",
+      ])
+    );
+  });
 });
