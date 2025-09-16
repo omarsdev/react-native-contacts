@@ -67,6 +67,18 @@ describe("package metadata", () => {
     expect(specSource).toContain("TurboModule");
   });
 
+  it("configures Kotlin support and clean manifest", () => {
+    const gradle = fs.readFileSync(path.join(root, "android", "build.gradle"), "utf8");
+    expect(gradle).toMatch(/kotlin-android/);
+    expect(gradle).toMatch(/kotlin-stdlib/);
+
+    const manifest = fs.readFileSync(
+      path.join(root, "android", "src", "main", "AndroidManifest.xml"),
+      "utf8"
+    );
+    expect(manifest).not.toMatch(/package=/);
+  });
+
   it("defines a TurboModule spec for iOS", () => {
     const iosSpec = fs.readFileSync(
       path.join(root, "ios", "NativeContactsLastUpdatedSpec.swift"),
