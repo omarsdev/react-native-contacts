@@ -98,7 +98,9 @@ static NSString *const kCLUPersistedSinceKey = @"ContactsLastUpdatedPersistedSin
                 if (e.contact.identifier) [changedIds addObject:e.contact.identifier];
             } else if ([event isKindOfClass:[CNChangeHistoryUpdateContactEvent class]]) {
                 CNChangeHistoryUpdateContactEvent *e = (CNChangeHistoryUpdateContactEvent *)event;
-                if (e.contact.identifier) [changedIds addObject:e.contact.identifier];
+                NSString *identifier = nil;
+                @try { identifier = [e valueForKey:@"contactIdentifier"]; } @catch (...) { identifier = nil; }
+                if (identifier.length > 0) [changedIds addObject:identifier];
             }
         }];
         if (!ok || err) {
@@ -235,7 +237,9 @@ static NSString *const kCLUPersistedSinceKey = @"ContactsLastUpdatedPersistedSin
                 if (e.contact.identifier) [changedIds addObject:e.contact.identifier];
             } else if ([event isKindOfClass:[CNChangeHistoryUpdateContactEvent class]]) {
                 CNChangeHistoryUpdateContactEvent *e = (CNChangeHistoryUpdateContactEvent *)event;
-                if (e.contact.identifier) [changedIds addObject:e.contact.identifier];
+                NSString *identifier = nil;
+                @try { identifier = [e valueForKey:@"contactIdentifier"]; } @catch (...) { identifier = nil; }
+                if (identifier.length > 0) [changedIds addObject:identifier];
             }
         }];
         if (!ok || err) {
