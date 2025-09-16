@@ -4,6 +4,9 @@
   "private": true,
   "scripts": {
     "android": "react-native run-android",
+    "clean:metro": "rm -rf $TMPDIR/metro-* $TMPDIR/haste-map-* || true",
+    "clean:android": "rm -rf android/app/build android/.gradle && cd android && ./gradlew clean",
+    "rebuild:android": "yarn clean:android && yarn clean:metro && react-native run-android",
     "ios": "react-native run-ios",
     "lint": "eslint .",
     "start": "react-native start",
