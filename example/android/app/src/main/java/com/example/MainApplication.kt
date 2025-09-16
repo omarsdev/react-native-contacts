@@ -2,6 +2,7 @@ package com.example
 
 import android.app.Application
 import com.facebook.react.PackageList
+import com.contactsupdated.ContactsLastUpdatedPackage
 import com.facebook.react.ReactApplication
 import com.facebook.react.ReactHost
 import com.facebook.react.ReactNativeHost
@@ -18,8 +19,8 @@ class MainApplication : Application(), ReactApplication {
       object : DefaultReactNativeHost(this) {
         override fun getPackages(): List<ReactPackage> =
             PackageList(this).packages.apply {
-              // Packages that cannot be autolinked yet can be added manually here, for example:
-              // add(MyReactNativePackage())
+              // Ensure the contacts module is registered during local dev
+              add(ContactsLastUpdatedPackage())
             }
 
         override fun getJSMainModuleName(): String = "index"
