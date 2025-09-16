@@ -47,14 +47,14 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/omarsdev/react-native-contacts-last-updated.git"
+    "url": "git+https://github.com/omarsdev/react-native-contacts.git"
   },
   "author": "Omar Sukarieh <me@omars.dev> (https://github.com/omarsdev)",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/omarsdev/react-native-contacts-last-updated/issues"
+    "url": "https://github.com/omarsdev/react-native-contacts/issues"
   },
-  "homepage": "https://github.com/omarsdev/react-native-contacts-last-updated#readme",
+  "homepage": "https://github.com/omarsdev/react-native-contacts#readme",
   "publishConfig": {
     "access": "public",
     "registry": "https://registry.npmjs.org/"
