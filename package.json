@@ -1,6 +1,6 @@
 {
   "name": "react-native-contacts-last-updated",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Access the device address book and track when contacts were last touched. This package exposes a single API surface that falls back gracefully when the new TurboModule system is unavailable.",
   "homepage": "https://github.com/omarsdev/react-native-contacts-last-updated#readme",
   "bugs": {
