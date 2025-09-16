@@ -1,5 +1,6 @@
 #import "ContactsLastUpdated.h"
 #import <Contacts/Contacts.h>
+#import <Foundation/Foundation.h>
 
 @implementation ContactsLastUpdated
 RCT_EXPORT_MODULE()
@@ -11,6 +12,60 @@ RCT_EXPORT_MODULE()
 }
 
 static NSString *const kCLUPersistedSinceKey = @"ContactsLastUpdatedPersistedSince";
+
+// Helper: enumerate change history via whichever selector is available on this SDK.
+- (BOOL)clu_enumerateChangeHistoryInStore:(CNContactStore *)store
+                               startToken:(NSData *)startToken
+                              usingBlock:(void (^)(CNChangeHistoryEvent *event, BOOL *stop))block
+{
+    if (startToken == nil) return YES;
+    CNChangeHistoryFetchRequest *ch = [CNChangeHistoryFetchRequest new];
+    ch.startingToken = startToken;
+
+    // Prefer modern API
+    SEL selModern = NSSelectorFromString(@"enumerateChangeHistoryForFetchRequest:error:usingBlock:");
+    if ([store respondsToSelector:selModern]) {
+        NSMethodSignature *sig = [store methodSignatureForSelector:selModern];
+        if (!sig) return NO;
+        NSInvocation *inv = [NSInvocation invocationWithMethodSignature:sig];
+        [inv setSelector:selModern];
+        [inv setTarget:store];
+        [inv retainArguments];
+        NSError *tmpErr = nil;
+        CNChangeHistoryFetchRequest *req = ch;
+        void (^handler)(CNChangeHistoryEvent *, BOOL *) = block;
+        [inv setArgument:&req atIndex:2];
+        [inv setArgument:&tmpErr atIndex:3];
+        [inv setArgument:&handler atIndex:4];
+        [inv invoke];
+        BOOL ok = NO;
+        [inv getReturnValue:&ok];
+        return ok && (tmpErr == nil);
+    }
+
+    // Fallback to older API name if present
+    SEL selLegacy = NSSelectorFromString(@"enumerateChangeHistoryWithFetchRequest:error:eventHandler:");
+    if ([store respondsToSelector:selLegacy]) {
+        NSMethodSignature *sig = [store methodSignatureForSelector:selLegacy];
+        if (!sig) return NO;
+        NSInvocation *inv = [NSInvocation invocationWithMethodSignature:sig];
+        [inv setSelector:selLegacy];
+        [inv setTarget:store];
+        [inv retainArguments];
+        NSError *tmpErr = nil;
+        CNChangeHistoryFetchRequest *req = ch;
+        void (^handler)(CNChangeHistoryEvent *, BOOL *) = block;
+        [inv setArgument:&req atIndex:2];
+        [inv setArgument:&tmpErr atIndex:3];
+        [inv setArgument:&handler atIndex:4];
+        [inv invoke];
+        BOOL ok = NO;
+        [inv getReturnValue:&ok];
+        return ok && (tmpErr == nil);
+    }
+
+    return NO;
+}
 
 // Persisted token helpers (stores a small change-history token, not contacts)
 - (NSString *)getPersistedSince
@@ -35,11 +90,9 @@ static NSString *const kCLUPersistedSinceKey = @"ContactsLastUpdatedPersistedSin
     NSError *err = nil;
 
     if (startToken) {
-        CNChangeHistoryFetchRequest *ch = [CNChangeHistoryFetchRequest new];
-        ch.startingToken = startToken;
-        BOOL ok = [store enumerateChangeHistoryForFetchRequest:ch
-                                                        error:&err
-                                                   usingBlock:^(CNChangeHistoryEvent * _Nonnull event, BOOL * _Nonnull stop) {
+        BOOL ok = [self clu_enumerateChangeHistoryInStore:store
+                                               startToken:startToken
+                                              usingBlock:^(CNChangeHistoryEvent * _Nonnull event, BOOL * _Nonnull stop) {
             if ([event isKindOfClass:[CNChangeHistoryAddContactEvent class]]) {
                 CNChangeHistoryAddContactEvent *e = (CNChangeHistoryAddContactEvent *)event;
                 if (e.contact.identifier) [changedIds addObject:e.contact.identifier];
@@ -173,12 +226,9 @@ static NSString *const kCLUPersistedSinceKey = @"ContactsLastUpdatedPersistedSin
 
     if (startToken) {
         // Use change history to collect added/updated identifiers
-        CNChangeHistoryFetchRequest *ch = [CNChangeHistoryFetchRequest new];
-        ch.startingToken = startToken;
-
-        BOOL ok = [store enumerateChangeHistoryForFetchRequest:ch
-                                                        error:&err
-                                                   usingBlock:^(CNChangeHistoryEvent * _Nonnull event, BOOL * _Nonnull stop) {
+        BOOL ok = [self clu_enumerateChangeHistoryInStore:store
+                                               startToken:startToken
+                                              usingBlock:^(CNChangeHistoryEvent * _Nonnull event, BOOL * _Nonnull stop) {
             // Add contacts changed
             if ([event isKindOfClass:[CNChangeHistoryAddContactEvent class]]) {
                 CNChangeHistoryAddContactEvent *e = (CNChangeHistoryAddContactEvent *)event;
