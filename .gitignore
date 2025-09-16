@@ -12,3 +12,33 @@ coverage/
 yarn-error.log
 yarn-debug.log*
 package-lock.json
+
+# Example app (nested React Native project) ignores
+example/node_modules/
+example/.DS_Store
+example/npm-debug.log
+example/yarn-error.log
+
+# Android (example)
+example/android/app/build/
+example/android/.gradle/
+example/android/local.properties
+example/android/*.iml
+example/android/.cxx/
+example/android/*.keystore
+
+# iOS (example)
+example/ios/Pods/
+example/ios/build/
+example/ios/*.xcuserstate
+example/ios/DerivedData/
+
+# IDE and cache (example)
+example/.idea/
+example/.kotlin/
+example/.yarn/*
+!example/.yarn/patches
+!example/.yarn/plugins
+!example/.yarn/releases
+!example/.yarn/sdks
+!example/.yarn/versions
