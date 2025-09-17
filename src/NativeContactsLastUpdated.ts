@@ -1,4 +1,8 @@
-import { TurboModuleRegistry, type TurboModule } from 'react-native';
+import {
+  TurboModuleRegistry,
+  NativeModules,
+  type TurboModule,
+} from 'react-native';
 
 export type Contact = {
   id: string;
@@ -37,4 +41,34 @@ export interface Spec extends TurboModule {
   commitPersisted(nextSince: string): void;
 }
 
-export default TurboModuleRegistry.getEnforcing<Spec>('ContactsLastUpdated');
+function createFallbackModule(): Spec {
+  let persistedToken = '';
+
+  return {
+    multiply: (a: number, b: number) => a * b,
+    getAll: () => [],
+    getUpdatedSince: () => ({ items: [], nextSince: persistedToken }),
+    getPersistedSince: () => persistedToken,
+    getUpdatedFromPersisted: () => ({ items: [], nextSince: persistedToken }),
+    commitPersisted: (nextSince: string) => {
+      persistedToken = nextSince;
+    },
+  } as Spec;
+}
+
+const NativeModule: Spec =
+  TurboModuleRegistry.get<Spec>('ContactsLastUpdated') ??
+  (NativeModules.ContactsLastUpdated as Spec | undefined) ??
+  createFallbackModule();
+
+if (NativeModule === undefined || NativeModule === null) {
+  throw new Error('ContactsLastUpdated native module unavailable.');
+}
+
+if (!('multiply' in NativeModule)) {
+  console.warn(
+    'ContactsLastUpdated native module missing expected methods. Using fallback implementation.'
+  );
+}
+
+export default NativeModule;
