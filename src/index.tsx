@@ -1,5 +1,11 @@
 import ContactsLastUpdated from './NativeContactsLastUpdated';
-export type { Contact } from './NativeContactsLastUpdated';
+import type { Contact } from './NativeContactsLastUpdated';
+export type {
+  Contact,
+  ContactChange,
+  PhoneNumberChanges,
+  PhoneNumberUpdate,
+} from './NativeContactsLastUpdated';
 
 export function multiply(a: number, b: number): number {
   return ContactsLastUpdated.multiply(a, b);
@@ -8,6 +14,30 @@ export function multiply(a: number, b: number): number {
 // Paged API: Full list. On Android sorted by last updated desc; iOS order undefined.
 export function getAllPaged(offset: number, limit: number) {
   return ContactsLastUpdated.getAll(offset, limit);
+}
+
+// Convenience: fetch contacts either by page or entire list.
+// Provide `limit` to fetch a single page; omit to stream until exhaustion starting at optional `offset`.
+export async function getAll(options?: {
+  offset?: number;
+  limit?: number;
+  pageSize?: number;
+}): Promise<Contact[]> {
+  const offset = options?.offset ?? 0;
+  if (typeof options?.limit === 'number') {
+    return ContactsLastUpdated.getAll(offset, options.limit);
+  }
+  const pageSize = options?.pageSize ?? 500;
+  let cursor = offset;
+  const results: Contact[] = [];
+  while (true) {
+    const page = ContactsLastUpdated.getAll(cursor, pageSize);
+    if (!page || page.length === 0) break;
+    results.push(...page);
+    cursor += page.length;
+    if (page.length < pageSize) break;
+  }
+  return results;
 }
 
 // Paged API: Delta list since a token.
@@ -34,11 +64,14 @@ export function commitPersisted(nextSince: string) {
   return ContactsLastUpdated.commitPersisted(nextSince);
 }
 
+export function getById(id: string) {
+  return ContactsLastUpdated.getById(id);
+}
+
 // Convenience: stream all contacts in chunks. Yields arrays of contacts.
 export async function* streamAll(pageSize = 200) {
   let offset = 0;
   while (true) {
-    // eslint-disable-next-line no-await-in-loop
     const page = await ContactsLastUpdated.getAll(offset, pageSize);
     if (!page || page.length === 0) break;
     yield page;
@@ -52,14 +85,13 @@ export async function* streamUpdatedSince(since: string, pageSize = 200) {
   let nextSince = since;
   // We keep the same `since` across pages; only adopt `nextSince` after finishing all pages
   while (true) {
-    // eslint-disable-next-line no-await-in-loop
     const { items, nextSince: proposed } =
       await ContactsLastUpdated.getUpdatedSince(since, offset, pageSize);
     if (!items || items.length === 0) {
       nextSince = proposed || nextSince;
       break;
     }
-    yield { items } as any;
+    yield { items };
     offset += items.length;
     nextSince = proposed || nextSince;
   }
@@ -71,12 +103,11 @@ export async function* streamUpdatedFromPersisted(pageSize = 200) {
   let offset = 0;
   let sessionToken: string | undefined;
   while (true) {
-    // eslint-disable-next-line no-await-in-loop
     const { items, nextSince } =
       await ContactsLastUpdated.getUpdatedFromPersisted(offset, pageSize);
     if (sessionToken == null) sessionToken = nextSince;
     if (!items || items.length === 0) break;
-    yield { items } as any;
+    yield { items };
     offset += items.length;
     if (items.length < pageSize) break;
   }
