@@ -1,6 +1,6 @@
 {
   "name": "@omarsdev/react-native-contacts",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Access the device address book and track when contacts were last touched.",
   "main": "./lib/module/index.js",
   "types": "./lib/typescript/src/index.d.ts",
