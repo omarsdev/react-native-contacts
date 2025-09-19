@@ -14,6 +14,29 @@ export type Contact = {
   lastUpdatedAt?: number | null;
 };
 
+export type PhoneNumberUpdate = {
+  previous: string;
+  current: string;
+};
+
+export type PhoneNumberChanges = {
+  created: string[];
+  deleted: string[];
+  updated: PhoneNumberUpdate[];
+};
+
+export type ContactChange = Contact & {
+  changeType: 'created' | 'updated' | 'deleted';
+  isDeleted: boolean;
+  phoneNumberChanges: PhoneNumberChanges;
+  previous?: {
+    displayName?: string | null;
+    givenName?: string | null;
+    familyName?: string | null;
+    phoneNumbers: string[];
+  } | null;
+};
+
 export interface Spec extends TurboModule {
   // Simple sample kept for template parity
   multiply(a: number, b: number): number;
@@ -21,6 +44,9 @@ export interface Spec extends TurboModule {
   // Paged full fetch; on Android sorted by last updated desc.
   // iOS order is undefined (CNContacts doesn’t expose last updated).
   getAll(offset: number, limit: number): Contact[];
+
+  // Retrieve a single contact by identifier if it exists.
+  getById(id: string): Contact | null;
 
   // Paged delta fetch since a platform token.
   // Android expects `since` to be a millisecond timestamp as string.
@@ -30,14 +56,14 @@ export interface Spec extends TurboModule {
     since: string,
     offset: number,
     limit: number
-  ): { items: Contact[]; nextSince: string };
+  ): { items: ContactChange[]; nextSince: string };
 
   // Persisted-delta helpers (native keeps a small token, not contacts)
   getPersistedSince(): string;
   getUpdatedFromPersisted(
     offset: number,
     limit: number
-  ): { items: Contact[]; nextSince: string };
+  ): { items: ContactChange[]; nextSince: string };
   commitPersisted(nextSince: string): void;
 }
 
@@ -47,9 +73,16 @@ function createFallbackModule(): Spec {
   return {
     multiply: (a: number, b: number) => a * b,
     getAll: () => [],
-    getUpdatedSince: () => ({ items: [], nextSince: persistedToken }),
+    getById: () => null,
+    getUpdatedSince: () => ({
+      items: [] as ContactChange[],
+      nextSince: persistedToken,
+    }),
     getPersistedSince: () => persistedToken,
-    getUpdatedFromPersisted: () => ({ items: [], nextSince: persistedToken }),
+    getUpdatedFromPersisted: () => ({
+      items: [] as ContactChange[],
+      nextSince: persistedToken,
+    }),
     commitPersisted: (nextSince: string) => {
       persistedToken = nextSince;
     },
