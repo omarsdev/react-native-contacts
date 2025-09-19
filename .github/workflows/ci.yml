@@ -9,6 +9,12 @@ on:
   merge_group:
     types:
       - checks_requested
+  release:
+    types:
+      - published
+
+permissions:
+  contents: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -197,6 +203,65 @@ jobs:
           echo "Canary version: $CANARY_VERSION"
           npm version "$CANARY_VERSION" --no-git-tag-version
           npm publish --access public --tag canary
+
+  publish-release:
+    name: Publish release to npm
+    if: github.event_name == 'release' && github.event.release.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.release.target_commitish }}
+
+      - name: Setup
+        uses: ./.github/actions/setup
+
+      - name: Bump package version
+        id: bump
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if [ -z "$RELEASE_TAG" ]; then
+            echo "Release tag is required to set package version" >&2
+            exit 1
+          fi
+          NEW_VERSION=$(node .github/scripts/bump-version.mjs --set "$RELEASE_TAG")
+          echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Commit version bump
+        id: commit
+        env:
+          VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet; then
+            echo "did_commit=false" >> "$GITHUB_OUTPUT"
+            echo "Package version already up to date"
+            exit 0
+          fi
+          git commit -am "chore: bump version to ${VERSION}"
+          echo "did_commit=true" >> "$GITHUB_OUTPUT"
+
+      - name: Push version bump
+        if: steps.commit.outputs.did_commit == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git push
+
+      - name: Build package
+        run: yarn prepare
+
+      - name: Configure npm auth
+        run: echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish release
+        run: npm publish --access public
 
   publish:
     name: Publish to npm (push to main)
