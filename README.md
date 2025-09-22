@@ -129,16 +129,8 @@ API reference & examples
 
 ### Functions (promise / async)
 
-- `getAllPaged(offset: number, limit: number): Contact[]`
-  - Low-level paged fetch that mirrors the native call. On Android the result is sorted by `lastUpdatedAt` descending; iOS order is undefined.
-
-  ```ts
-  const first500 = await getAllPaged(0, 500);
-  const next500 = await getAllPaged(500, 500);
-  ```
-
 - `getAll(options?: { offset?: number; limit?: number; pageSize?: number }): Promise<Contact[]>`
-  - Convenience wrapper for `getAll`. When `limit` is provided it behaves like `getAllPaged`. Otherwise it will loop until all contacts are fetched (respecting `pageSize`).
+  - Convenience wrapper for the native `getAll`. When `limit` is provided it returns that specific page. Otherwise it loops until all contacts are fetched (respecting `pageSize`, default 500).
 
   ```ts
   const everyone = await getAll({ pageSize: 400 });
@@ -159,63 +151,35 @@ API reference & examples
   const page = await getUpdatedFromPersistedPaged(0, 300);
   ```
 
-### Generators
-
-- `streamAll(pageSize?: number)`
-  - Async generator that yields `Contact[]` pages until the address book is exhausted. Under the hood it repeatedly calls `getAll`.
-
-  ```ts
-  for await (const contacts of streamAll(250)) {
-    console.log('Received', contacts.length);
-  }
-  ```
-
-- `streamUpdatedSince(since: string, pageSize?: number)`
-  - Async generator that yields `{ items: ContactChange[] }` based on a provided token and returns the final token after the loop completes.
-
-  ```ts
-  let token = lastToken;
-  for await (const { items } of streamUpdatedSince(token, 200)) {
-    // process items
-  }
-  ```
-
-- `streamUpdatedFromPersisted(pageSize?: number)`
-  - Async generator that uses the native persisted token and commits the new token automatically when finished. Returns the committed token.
-  ```ts
-  const committedToken = await (async () => {
-    let finalToken = '';
-    for await (const { items } of streamUpdatedFromPersisted(200)) {
-      finalToken = items.length ? finalToken : finalToken;
-    }
-    return finalToken;
-  })();
-  ```
-
 Quick start
 
 ```ts
 import {
-  streamAll,
-  streamUpdatedFromPersisted,
+  commitPersisted,
+  getAll,
+  getUpdatedFromPersistedPaged,
 } from '@omarsdev/react-native-contacts';
 import { ensureContactsPermission } from './permissions'; // from snippet above
 
-// First run: baseline in chunks (paged)
+// First run: baseline in batches (paged)
 if (await ensureContactsPermission()) {
-  for await (const page of streamAll(300)) {
-    // page is Contact[]
-    console.log('All page', page.length);
-  }
+  const everyone = await getAll({ pageSize: 300 });
+  console.log('Fetched contacts', everyone.length);
 }
 
-// Next runs: delta in chunks (token stored natively)
+// Next runs: delta batches using native token
 if (await ensureContactsPermission()) {
-  for await (const { items } of streamUpdatedFromPersisted(300)) {
-    // items is ContactChange[] describing created/updated/deleted contacts
+  let offset = 0;
+  let sessionToken: string | undefined;
+  for (;;) {
+    const { items, nextSince } = await getUpdatedFromPersistedPaged(offset, 300);
+    if (sessionToken == null) sessionToken = nextSince;
+    if (!items.length) break;
     console.log('Delta page', items.length);
+    offset += items.length;
+    if (items.length < 300) break;
   }
-  // streamUpdatedFromPersisted commits the new token automatically
+  if (sessionToken) commitPersisted(sessionToken);
 }
 ```
 

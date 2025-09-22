@@ -7,11 +7,6 @@ export type {
   PhoneNumberUpdate,
 } from './NativeContactsLastUpdated';
 
-// Paged API: Full list. On Android sorted by last updated desc; iOS order undefined.
-export function getAllPaged(offset: number, limit: number) {
-  return ContactsLastUpdated.getAll(offset, limit);
-}
-
 // Convenience: fetch contacts either by page or entire list.
 // Provide `limit` to fetch a single page; omit to stream until exhaustion starting at optional `offset`.
 export async function getAll(options?: {
@@ -62,51 +57,4 @@ export function commitPersisted(nextSince: string) {
 
 export function getById(id: string) {
   return ContactsLastUpdated.getById(id);
-}
-
-// Convenience: stream all contacts in chunks. Yields arrays of contacts.
-export async function* streamAll(pageSize = 200) {
-  let offset = 0;
-  while (true) {
-    const page = await ContactsLastUpdated.getAll(offset, pageSize);
-    if (!page || page.length === 0) break;
-    yield page;
-    offset += page.length;
-  }
-}
-
-// Convenience: stream updated contacts in chunks. Yields arrays of contacts and returns final token.
-export async function* streamUpdatedSince(since: string, pageSize = 200) {
-  let offset = 0;
-  let nextSince = since;
-  // We keep the same `since` across pages; only adopt `nextSince` after finishing all pages
-  while (true) {
-    const { items, nextSince: proposed } =
-      await ContactsLastUpdated.getUpdatedSince(since, offset, pageSize);
-    if (!items || items.length === 0) {
-      nextSince = proposed || nextSince;
-      break;
-    }
-    yield { items };
-    offset += items.length;
-    nextSince = proposed || nextSince;
-  }
-  return nextSince;
-}
-
-// Convenience: stream delta using native-persisted token. Returns final token committed.
-export async function* streamUpdatedFromPersisted(pageSize = 200) {
-  let offset = 0;
-  let sessionToken: string | undefined;
-  while (true) {
-    const { items, nextSince } =
-      await ContactsLastUpdated.getUpdatedFromPersisted(offset, pageSize);
-    if (sessionToken == null) sessionToken = nextSince;
-    if (!items || items.length === 0) break;
-    yield { items };
-    offset += items.length;
-    if (items.length < pageSize) break;
-  }
-  if (sessionToken) ContactsLastUpdated.commitPersisted(sessionToken);
-  return sessionToken || (await ContactsLastUpdated.getPersistedSince());
 }
