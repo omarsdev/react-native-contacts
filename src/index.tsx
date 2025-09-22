@@ -7,10 +7,6 @@ export type {
   PhoneNumberUpdate,
 } from './NativeContactsLastUpdated';
 
-export function multiply(a: number, b: number): number {
-  return ContactsLastUpdated.multiply(a, b);
-}
-
 // Paged API: Full list. On Android sorted by last updated desc; iOS order undefined.
 export function getAllPaged(offset: number, limit: number) {
   return ContactsLastUpdated.getAll(offset, limit);

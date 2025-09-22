@@ -38,9 +38,6 @@ export type ContactChange = Contact & {
 };
 
 export interface Spec extends TurboModule {
-  // Simple sample kept for template parity
-  multiply(a: number, b: number): number;
-
   // Paged full fetch; on Android sorted by last updated desc.
   // iOS order is undefined (CNContacts doesn’t expose last updated).
   getAll(offset: number, limit: number): Contact[];
@@ -71,7 +68,6 @@ function createFallbackModule(): Spec {
   let persistedToken = '';
 
   return {
-    multiply: (a: number, b: number) => a * b,
     getAll: () => [],
     getById: () => null,
     getUpdatedSince: () => ({
@@ -98,7 +94,11 @@ if (NativeModule === undefined || NativeModule === null) {
   throw new Error('ContactsLastUpdated native module unavailable.');
 }
 
-if (!('multiply' in NativeModule)) {
+if (
+  !('getAll' in NativeModule) ||
+  !('getById' in NativeModule) ||
+  !('getUpdatedSince' in NativeModule)
+) {
   console.warn(
     'ContactsLastUpdated native module missing expected methods. Using fallback implementation.'
   );

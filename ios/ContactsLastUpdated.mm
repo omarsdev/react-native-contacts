@@ -5,12 +5,6 @@
 @implementation ContactsLastUpdated
 RCT_EXPORT_MODULE()
 
-- (NSNumber *)multiply:(double)a b:(double)b {
-    NSNumber *result = @(a * b);
-
-    return result;
-}
-
 static NSString *const kCLUPersistedSinceKey = @"ContactsLastUpdatedPersistedSince";
 static NSString *const kCLUSnapshotDirName = @"ContactsLastUpdated";
 static NSString *const kCLUSnapshotFileName = @"fp.plist";

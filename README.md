@@ -127,12 +127,6 @@ API reference & examples
   commitPersisted(nextToken);
   ```
 
-- `multiply(a: number, b: number): number`
-  - A simple sample used in the template (kept for backwards-compatibility with the RN library scaffold). Not used by the contacts flows.
-  ```ts
-  multiply(2, 3); // => 6
-  ```
-
 ### Functions (promise / async)
 
 - `getAllPaged(offset: number, limit: number): Contact[]`
