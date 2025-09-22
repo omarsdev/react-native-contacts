@@ -1,11 +1,25 @@
 import ContactsLastUpdated from './NativeContactsLastUpdated';
-import type { Contact } from './NativeContactsLastUpdated';
+import type { Contact, ContactChange } from './NativeContactsLastUpdated';
 export type {
   Contact,
   ContactChange,
   PhoneNumberChanges,
   PhoneNumberUpdate,
 } from './NativeContactsLastUpdated';
+
+type DeltaPage = {
+  mode: 'delta';
+  items: ContactChange[];
+  nextSince: string;
+};
+
+type FullPage = {
+  mode: 'full';
+  items: Contact[];
+  nextSince: string;
+};
+
+export type UpdatedPage = DeltaPage | FullPage;
 
 // Convenience: fetch contacts either by page or entire list.
 // Provide `limit` to fetch a single page; omit to stream until exhaustion starting at optional `offset`.
@@ -38,8 +52,28 @@ export function getUpdatedSincePaged(
   since: string,
   offset: number,
   limit: number
-) {
-  return ContactsLastUpdated.getUpdatedSince(since, offset, limit);
+): UpdatedPage {
+  const result = ContactsLastUpdated.getUpdatedSince(since, offset, limit);
+  const nextSince = result.nextSince ?? '';
+  if (result.mode === 'full') {
+    return {
+      mode: 'full',
+      items: result.items,
+      nextSince,
+    };
+  }
+  if (!nextSince && since.trim().length === 0) {
+    return {
+      mode: 'full',
+      items: (result as unknown as { items: Contact[] }).items,
+      nextSince,
+    };
+  }
+  return {
+    mode: 'delta',
+    items: result.items,
+    nextSince,
+  };
 }
 
 // Persisted-delta helpers
@@ -47,8 +81,24 @@ export function getPersistedSince() {
   return ContactsLastUpdated.getPersistedSince();
 }
 
-export function getUpdatedFromPersistedPaged(offset: number, limit: number) {
-  return ContactsLastUpdated.getUpdatedFromPersisted(offset, limit);
+export function getUpdatedFromPersistedPaged(
+  offset: number,
+  limit: number
+): UpdatedPage {
+  const result = ContactsLastUpdated.getUpdatedFromPersisted(offset, limit);
+  const nextSince = result.nextSince ?? '';
+  if (result.mode === 'full' || !nextSince) {
+    return {
+      mode: 'full',
+      items: (result as unknown as { items: Contact[] }).items,
+      nextSince,
+    };
+  }
+  return {
+    mode: 'delta',
+    items: result.items,
+    nextSince,
+  };
 }
 
 export function commitPersisted(nextSince: string) {

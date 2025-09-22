@@ -37,6 +37,20 @@ export type ContactChange = Contact & {
   } | null;
 };
 
+type NativeDeltaResult = {
+  items: ContactChange[];
+  nextSince: string;
+  mode?: 'delta';
+};
+
+type NativeFullResult = {
+  items: Contact[];
+  nextSince: string;
+  mode: 'full';
+};
+
+export type NativeUpdatedResult = NativeDeltaResult | NativeFullResult;
+
 export interface Spec extends TurboModule {
   // Paged full fetch; on Android sorted by last updated desc.
   // iOS order is undefined (CNContacts doesn’t expose last updated).
@@ -53,14 +67,14 @@ export interface Spec extends TurboModule {
     since: string,
     offset: number,
     limit: number
-  ): { items: ContactChange[]; nextSince: string };
+  ): NativeUpdatedResult;
 
   // Persisted-delta helpers (native keeps a small token, not contacts)
   getPersistedSince(): string;
   getUpdatedFromPersisted(
     offset: number,
     limit: number
-  ): { items: ContactChange[]; nextSince: string };
+  ): NativeUpdatedResult;
   commitPersisted(nextSince: string): void;
 }
 
@@ -73,11 +87,13 @@ function createFallbackModule(): Spec {
     getUpdatedSince: () => ({
       items: [] as ContactChange[],
       nextSince: persistedToken,
+      mode: 'delta',
     }),
     getPersistedSince: () => persistedToken,
     getUpdatedFromPersisted: () => ({
       items: [] as ContactChange[],
       nextSince: persistedToken,
+      mode: 'delta',
     }),
     commitPersisted: (nextSince: string) => {
       persistedToken = nextSince;
