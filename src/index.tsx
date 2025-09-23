@@ -1,5 +1,5 @@
 import ContactsLastUpdated from './NativeContactsLastUpdated';
-import type { Contact } from './NativeContactsLastUpdated';
+import type { Contact, ContactChange } from './NativeContactsLastUpdated';
 export type {
   Contact,
   ContactChange,
@@ -7,14 +7,19 @@ export type {
   PhoneNumberUpdate,
 } from './NativeContactsLastUpdated';
 
-export function multiply(a: number, b: number): number {
-  return ContactsLastUpdated.multiply(a, b);
-}
+type DeltaPage = {
+  mode: 'delta';
+  items: ContactChange[];
+  nextSince: string;
+};
 
-// Paged API: Full list. On Android sorted by last updated desc; iOS order undefined.
-export function getAllPaged(offset: number, limit: number) {
-  return ContactsLastUpdated.getAll(offset, limit);
-}
+type FullPage = {
+  mode: 'full';
+  items: Contact[];
+  nextSince: string;
+};
+
+export type UpdatedPage = DeltaPage | FullPage;
 
 // Convenience: fetch contacts either by page or entire list.
 // Provide `limit` to fetch a single page; omit to stream until exhaustion starting at optional `offset`.
@@ -31,7 +36,7 @@ export async function getAll(options?: {
   let cursor = offset;
   const results: Contact[] = [];
   while (true) {
-    const page = ContactsLastUpdated.getAll(cursor, pageSize);
+    const page = await ContactsLastUpdated.getAll(cursor, pageSize);
     if (!page || page.length === 0) break;
     results.push(...page);
     cursor += page.length;
@@ -43,74 +48,70 @@ export async function getAll(options?: {
 // Paged API: Delta list since a token.
 // Android: token is a millisecond timestamp string.
 // iOS: token is a base64-encoded CNChangeHistory token.
-export function getUpdatedSincePaged(
+export async function getUpdatedSincePaged(
   since: string,
   offset: number,
   limit: number
-) {
-  return ContactsLastUpdated.getUpdatedSince(since, offset, limit);
+): Promise<UpdatedPage> {
+  const result = await ContactsLastUpdated.getUpdatedSince(
+    since,
+    offset,
+    limit
+  );
+  const nextSince = result.nextSince ?? '';
+  if (result.mode === 'full') {
+    return {
+      mode: 'full',
+      items: result.items,
+      nextSince,
+    };
+  }
+  if (!nextSince && since.trim().length === 0) {
+    return {
+      mode: 'full',
+      items: (result as unknown as { items: Contact[] }).items,
+      nextSince,
+    };
+  }
+  return {
+    mode: 'delta',
+    items: result.items,
+    nextSince,
+  };
 }
 
 // Persisted-delta helpers
-export function getPersistedSince() {
+export async function getPersistedSince(): Promise<string> {
   return ContactsLastUpdated.getPersistedSince();
 }
 
-export function getUpdatedFromPersistedPaged(offset: number, limit: number) {
-  return ContactsLastUpdated.getUpdatedFromPersisted(offset, limit);
+export async function getUpdatedFromPersistedPaged(
+  offset: number,
+  limit: number
+): Promise<UpdatedPage> {
+  const result = await ContactsLastUpdated.getUpdatedFromPersisted(
+    offset,
+    limit
+  );
+  const nextSince = result.nextSince ?? '';
+  if (result.mode === 'full' || !nextSince) {
+    return {
+      mode: 'full',
+      items: (result as unknown as { items: Contact[] }).items,
+      nextSince,
+    };
+  }
+  return {
+    mode: 'delta',
+    items: result.items,
+    nextSince,
+  };
 }
 
-export function commitPersisted(nextSince: string) {
-  return ContactsLastUpdated.commitPersisted(nextSince);
+export async function commitPersisted(nextSince: string): Promise<void> {
+  await ContactsLastUpdated.commitPersisted(nextSince);
 }
 
-export function getById(id: string) {
+export async function getById(id: string): Promise<Contact | null> {
   return ContactsLastUpdated.getById(id);
-}
-
-// Convenience: stream all contacts in chunks. Yields arrays of contacts.
-export async function* streamAll(pageSize = 200) {
-  let offset = 0;
-  while (true) {
-    const page = await ContactsLastUpdated.getAll(offset, pageSize);
-    if (!page || page.length === 0) break;
-    yield page;
-    offset += page.length;
-  }
-}
-
-// Convenience: stream updated contacts in chunks. Yields arrays of contacts and returns final token.
-export async function* streamUpdatedSince(since: string, pageSize = 200) {
-  let offset = 0;
-  let nextSince = since;
-  // We keep the same `since` across pages; only adopt `nextSince` after finishing all pages
-  while (true) {
-    const { items, nextSince: proposed } =
-      await ContactsLastUpdated.getUpdatedSince(since, offset, pageSize);
-    if (!items || items.length === 0) {
-      nextSince = proposed || nextSince;
-      break;
-    }
-    yield { items };
-    offset += items.length;
-    nextSince = proposed || nextSince;
-  }
-  return nextSince;
-}
-
-// Convenience: stream delta using native-persisted token. Returns final token committed.
-export async function* streamUpdatedFromPersisted(pageSize = 200) {
-  let offset = 0;
-  let sessionToken: string | undefined;
-  while (true) {
-    const { items, nextSince } =
-      await ContactsLastUpdated.getUpdatedFromPersisted(offset, pageSize);
-    if (sessionToken == null) sessionToken = nextSince;
-    if (!items || items.length === 0) break;
-    yield { items };
-    offset += items.length;
-    if (items.length < pageSize) break;
-  }
-  if (sessionToken) ContactsLastUpdated.commitPersisted(sessionToken);
-  return sessionToken || (await ContactsLastUpdated.getPersistedSince());
 }

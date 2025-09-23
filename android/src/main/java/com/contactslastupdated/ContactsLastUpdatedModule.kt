@@ -1,7 +1,8 @@
 package com.contactslastupdated
 
-import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.Arguments
+import com.facebook.react.bridge.Promise
+import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.WritableArray
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.module.annotations.ReactModule
@@ -25,12 +26,6 @@ class ContactsLastUpdatedModule(reactContext: ReactApplicationContext) :
 
   override fun getName(): String {
     return NAME
-  }
-
-  // Example method
-  // See https://reactnative.dev/docs/native-modules-android
-  override fun multiply(a: Double, b: Double): Double {
-    return a * b
   }
 
   // Data class for internal mapping
@@ -90,30 +85,50 @@ class ContactsLastUpdatedModule(reactContext: ReactApplicationContext) :
     val sortTimestamp: Long
   )
 
-  override fun getAll(offset: Double, limit: Double): WritableArray {
+  override fun getAll(offset: Double, limit: Double, promise: Promise) {
     val off = offset.toInt().coerceAtLeast(0)
     val lim = limit.toInt().coerceAtLeast(0)
-    if (lim <= 0) return Arguments.createArray()
+    if (lim <= 0) {
+      promise.resolve(Arguments.createArray())
+      return
+    }
     val contacts = queryContacts(off, lim, null)
-    return contactsToWritableArray(contacts)
+    promise.resolve(contactsToWritableArray(contacts))
   }
 
-  override fun getById(id: String): WritableMap? {
-    if (id.isEmpty()) return null
-    val contact = queryContactById(id) ?: return null
-    return contactToWritableMap(contact)
+  override fun getById(id: String, promise: Promise) {
+    if (id.isEmpty()) {
+      promise.resolve(null)
+      return
+    }
+    val contact = queryContactById(id)
+    promise.resolve(contact?.let { contactToWritableMap(it) })
   }
 
   override fun getUpdatedSince(
     since: String,
     offset: Double,
-    limit: Double
-  ): WritableMap {
+    limit: Double,
+    promise: Promise
+  ) {
+    val off = offset.toInt().coerceAtLeast(0)
+    val lim = limit.toInt().coerceAtLeast(0)
+    if (since.isBlank()) {
+      val contacts = if (lim <= 0) emptyList() else queryContacts(off, lim, null)
+      val result = Arguments.createMap()
+      result.putArray("items", contactsToWritableArray(contacts))
+      result.putString("nextSince", System.currentTimeMillis().toString())
+      result.putString("mode", "full")
+      promise.resolve(result)
+      return
+    }
+
     val delta = computeDelta(since.toLongOrNull() ?: 0L, offset, limit)
     val result = Arguments.createMap()
     result.putArray("items", deltasToWritableArray(delta.items))
     result.putString("nextSince", delta.nextSince)
-    return result
+    result.putString("mode", "delta")
+    promise.resolve(result)
   }
 
   // Persisted token helpers (store a small timestamp, not contacts)
@@ -121,22 +136,46 @@ class ContactsLastUpdatedModule(reactContext: ReactApplicationContext) :
     reactApplicationContext.getSharedPreferences("ContactsLastUpdatedPrefs", Context.MODE_PRIVATE)
   }
 
-  override fun getPersistedSince(): String {
-    return prefs.getLong("since", 0L).toString()
+  override fun getPersistedSince(promise: Promise) {
+    val stored = prefs.getLong("since", 0L)
+    promise.resolve(if (stored <= 0L) "" else stored.toString())
   }
 
-  override fun getUpdatedFromPersisted(offset: Double, limit: Double): WritableMap {
-    val delta = computeDelta(prefs.getLong("since", 0L), offset, limit)
+  override fun getUpdatedFromPersisted(
+    offset: Double,
+    limit: Double,
+    promise: Promise
+  ) {
+    val off = offset.toInt().coerceAtLeast(0)
+    val lim = limit.toInt().coerceAtLeast(0)
+    val stored = prefs.getLong("since", 0L)
+    if (stored <= 0L) {
+      val contacts = if (lim <= 0) emptyList() else queryContacts(off, lim, null)
+      val map = Arguments.createMap()
+      map.putArray("items", contactsToWritableArray(contacts))
+      map.putString("nextSince", System.currentTimeMillis().toString())
+      map.putString("mode", "full")
+      promise.resolve(map)
+      return
+    }
+
+    val delta = computeDelta(stored, offset, limit)
     val map = Arguments.createMap()
     map.putArray("items", deltasToWritableArray(delta.items))
     map.putString("nextSince", delta.nextSince)
-    return map
+    map.putString("mode", "delta")
+    promise.resolve(map)
   }
 
-  override fun commitPersisted(nextSince: String) {
-    val v = nextSince.toLongOrNull() ?: return
+  override fun commitPersisted(nextSince: String, promise: Promise) {
+    val v = nextSince.toLongOrNull()
+    if (v == null) {
+      promise.resolve(null)
+      return
+    }
     prefs.edit().putLong("since", v).apply()
     rebuildSnapshot()
+    promise.resolve(null)
   }
 
   private data class DeltaResult(

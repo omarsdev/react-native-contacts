@@ -5,12 +5,6 @@
 @implementation ContactsLastUpdated
 RCT_EXPORT_MODULE()
 
-- (NSNumber *)multiply:(double)a b:(double)b {
-    NSNumber *result = @(a * b);
-
-    return result;
-}
-
 static NSString *const kCLUPersistedSinceKey = @"ContactsLastUpdatedPersistedSince";
 static NSString *const kCLUSnapshotDirName = @"ContactsLastUpdated";
 static NSString *const kCLUSnapshotFileName = @"fp.plist";
@@ -96,6 +90,38 @@ static NSDictionary *CLUContactToContactDict(CNContact *c) {
         @"familyName": family,
         @"lastUpdatedAt": [NSNull null],
     };
+}
+
+static NSArray<NSDictionary *> *CLUFetchContactPage(NSInteger off, NSInteger lim) {
+    if (lim <= 0) {
+        return @[];
+    }
+
+    CNContactStore *store = [CNContactStore new];
+    NSError *err = nil;
+
+    NSArray *keys = @[CNContactIdentifierKey,
+                      CNContactGivenNameKey,
+                      CNContactFamilyNameKey,
+                      CNContactPhoneNumbersKey];
+    CNContactFetchRequest *request = [[CNContactFetchRequest alloc] initWithKeysToFetch:keys];
+
+    NSMutableArray<NSDictionary *> *results = [NSMutableArray arrayWithCapacity:lim];
+    __block NSInteger index = -1;
+    BOOL ok = [store enumerateContactsWithFetchRequest:request
+                                                error:&err
+                                           usingBlock:^(CNContact * _Nonnull contact, BOOL * _Nonnull stop) {
+        index += 1;
+        if (index < off) { return; }
+        if ((NSInteger)results.count >= lim) { *stop = YES; return; }
+
+        [results addObject:CLUContactToContactDict(contact)];
+    }];
+
+    if (!ok || err) {
+        return @[];
+    }
+    return results;
 }
 
 static NSString *CLUStringOrEmpty(NSString *s) {
@@ -499,13 +525,16 @@ static void CLURegisterChangeEvent(NSMutableOrderedSet<NSString *> *changedIds,
 }
 
 // Persisted token helpers (stores a small change-history token, not contacts)
-- (NSString *)getPersistedSince
+- (void)getPersistedSince:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
 {
     NSString *v = [[NSUserDefaults standardUserDefaults] stringForKey:kCLUPersistedSinceKey];
-    return v ?: @"";
+    resolve(v ?: @"");
 }
 
-- (NSDictionary *)getUpdatedFromPersisted:(double)offset limit:(double)limit
+- (void)getUpdatedFromPersisted:(double)offset
+                          limit:(double)limit
+                         resolve:(RCTPromiseResolveBlock)resolve
+                          reject:(RCTPromiseRejectBlock)reject
 {
     NSInteger off = (NSInteger)MAX(0, offset);
     NSInteger lim = (NSInteger)MAX(0, limit);
@@ -515,6 +544,18 @@ static void CLURegisterChangeEvent(NSMutableOrderedSet<NSString *> *changedIds,
     NSData *startToken = nil;
     if (sinceStr != nil && sinceStr.length > 0) {
         startToken = [[NSData alloc] initWithBase64EncodedString:sinceStr options:0];
+    }
+
+    if (sinceStr == nil || sinceStr.length == 0) {
+        NSArray *page = CLUFetchContactPage(off, lim);
+        NSData *token = store.currentHistoryToken;
+        NSString *nextSince = token != nil ? [token base64EncodedStringWithOptions:0] : @"";
+        if (nextSince.length == 0) {
+            long long ms = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
+            nextSince = [NSString stringWithFormat:@"fp:%lld", ms];
+        }
+        resolve(@{ @"items": page ?: @[], @"nextSince": nextSince ?: @"", @"mode": @"full" });
+        return;
     }
 
     NSMutableDictionary<NSString *, NSDictionary *> *snapshot = CLULoadSnapshot();
@@ -542,14 +583,16 @@ static void CLURegisterChangeEvent(NSMutableOrderedSet<NSString *> *changedIds,
                 long long ms = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
                 fallbackNext = [NSString stringWithFormat:@"fp:%lld", ms];
             }
-            return @{ @"items": page ?: @[], @"nextSince": fallbackNext ?: @"" };
+            resolve(@{ @"items": page ?: @[], @"nextSince": fallbackNext ?: @"", @"mode": @"delta" });
+            return;
         }
     }
 
     if (lim <= 0) {
         NSData *newToken = store.currentHistoryToken;
         NSString *nextSince = newToken != nil ? [newToken base64EncodedStringWithOptions:0] : @"";
-        return @{ @"items": @[], @"nextSince": nextSince ?: @"" };
+        resolve(@{ @"items": @[], @"nextSince": nextSince ?: @"", @"mode": @"delta" });
+        return;
     }
 
     NSMutableArray<NSDictionary *> *items = [NSMutableArray array];
@@ -601,59 +644,45 @@ static void CLURegisterChangeEvent(NSMutableOrderedSet<NSString *> *changedIds,
         long long ms = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
         nextSince = [NSString stringWithFormat:@"fp:%lld", ms];
     }
-    return @{ @"items": items ?: @[], @"nextSince": nextSince ?: @"" };
+    resolve(@{ @"items": items ?: @[], @"nextSince": nextSince ?: @"", @"mode": @"delta" });
 }
 
 - (void)commitPersisted:(NSString *)nextSince
+                resolve:(RCTPromiseResolveBlock)resolve
+                 reject:(RCTPromiseRejectBlock)reject
 {
-    if (nextSince == nil) return;
+    if (nextSince == nil) {
+        resolve(nil);
+        return;
+    }
     [[NSUserDefaults standardUserDefaults] setObject:nextSince forKey:kCLUPersistedSinceKey];
     [[NSUserDefaults standardUserDefaults] synchronize];
     // Rebuild snapshot after committing to advance baseline
     CNContactStore *store = [CNContactStore new];
     CLURebuildSnapshot(store);
     gCLU_LastDeltaItems = nil;
+    resolve(nil);
 }
 
 // Paged full fetch. iOS cannot sort by last updated (not exposed),
 // so the order is undefined. Use small limits for performance.
-- (NSArray<NSDictionary *> *)getAll:(double)offset limit:(double)limit
+- (void)getAll:(double)offset
+       limit:(double)limit
+      resolve:(RCTPromiseResolveBlock)resolve
+       reject:(RCTPromiseRejectBlock)reject
 {
     NSInteger off = (NSInteger)MAX(0, offset);
     NSInteger lim = (NSInteger)MAX(0, limit);
-
-    CNContactStore *store = [CNContactStore new];
-    NSError *err = nil;
-
-    NSArray *keys = @[CNContactIdentifierKey,
-                      CNContactGivenNameKey,
-                      CNContactFamilyNameKey,
-                      CNContactPhoneNumbersKey];
-    CNContactFetchRequest *request = [[CNContactFetchRequest alloc] initWithKeysToFetch:keys];
-
-    NSMutableArray<NSDictionary *> *results = [NSMutableArray arrayWithCapacity:lim];
-    __block NSInteger index = -1;
-    BOOL ok = [store enumerateContactsWithFetchRequest:request
-                                                error:&err
-                                           usingBlock:^(CNContact * _Nonnull contact, BOOL * _Nonnull stop) {
-        index += 1;
-        if (index < off) { return; }
-        if ((NSInteger)results.count >= lim) { *stop = YES; return; }
-
-        [results addObject:CLUContactToContactDict(contact)];
-    }];
-
-    if (!ok || err) {
-        // On error, return empty list
-        return @[];
-    }
-    return results;
+    resolve(CLUFetchContactPage(off, lim));
 }
 
-- (NSDictionary *)getById:(NSString *)identifier
+- (void)getById:(NSString *)identifier
+      resolve:(RCTPromiseResolveBlock)resolve
+       reject:(RCTPromiseRejectBlock)reject
 {
     if (identifier == nil || identifier.length == 0) {
-        return nil;
+        resolve(nil);
+        return;
     }
     CNContactStore *store = [CNContactStore new];
     NSArray *keys = @[CNContactIdentifierKey,
@@ -663,18 +692,36 @@ static void CLURegisterChangeEvent(NSMutableOrderedSet<NSString *> *changedIds,
     NSError *err = nil;
     CNContact *contact = [store unifiedContactWithIdentifier:identifier keysToFetch:keys error:&err];
     if (err || contact == nil) {
-        return nil;
+        resolve(nil);
+        return;
     }
-    return CLUContactToContactDict(contact);
+    resolve(CLUContactToContactDict(contact));
 }
 
-// Paged delta since a change-history token. If `since` is empty, no items are returned
-// and the current token is provided as nextSince.
-- (NSDictionary *)getUpdatedSince:(NSString *)since offset:(double)offset limit:(double)limit
+// Paged delta since a change-history token. If `since` is empty, a full contact page is returned
+// (mode = full) alongside a synthetic token so callers can persist progress.
+- (void)getUpdatedSince:(NSString *)since
+                offset:(double)offset
+                 limit:(double)limit
+               resolve:(RCTPromiseResolveBlock)resolve
+                reject:(RCTPromiseRejectBlock)reject
 {
     NSInteger off = (NSInteger)MAX(0, offset);
     NSInteger lim = (NSInteger)MAX(0, limit);
     CNContactStore *store = [CNContactStore new];
+
+    BOOL initialSync = (since == nil) || (since.length == 0);
+    if (initialSync) {
+        NSArray *page = CLUFetchContactPage(off, lim);
+        NSData *token = store.currentHistoryToken;
+        NSString *nextSince = token != nil ? [token base64EncodedStringWithOptions:0] : @"";
+        if (nextSince.length == 0) {
+            long long ms = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
+            nextSince = [NSString stringWithFormat:@"fp:%lld", ms];
+        }
+        resolve(@{ @"items": page ?: @[], @"nextSince": nextSince ?: @"", @"mode": @"full" });
+        return;
+    }
 
     NSData *startToken = nil;
     if (since != nil && since.length > 0) {
@@ -706,7 +753,8 @@ static void CLURegisterChangeEvent(NSMutableOrderedSet<NSString *> *changedIds,
                 long long ms = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
                 fallbackNext = [NSString stringWithFormat:@"fp:%lld", ms];
             }
-            return @{ @"items": page ?: @[], @"nextSince": fallbackNext ?: @"" };
+            resolve(@{ @"items": page ?: @[], @"nextSince": fallbackNext ?: @"", @"mode": @"delta" });
+            return;
         }
     }
 
@@ -717,7 +765,8 @@ static void CLURegisterChangeEvent(NSMutableOrderedSet<NSString *> *changedIds,
             long long ms = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
             nextSince = [NSString stringWithFormat:@"fp:%lld", ms];
         }
-        return @{ @"items": @[], @"nextSince": nextSince ?: @"" };
+        resolve(@{ @"items": @[], @"nextSince": nextSince ?: @"", @"mode": @"delta" });
+        return;
     }
 
     NSMutableArray<NSDictionary *> *items = [NSMutableArray array];
@@ -768,7 +817,7 @@ static void CLURegisterChangeEvent(NSMutableOrderedSet<NSString *> *changedIds,
         long long ms = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
         nextSince = [NSString stringWithFormat:@"fp:%lld", ms];
     }
-    return @{ @"items": items ?: @[], @"nextSince": nextSince ?: @"" };
+    resolve(@{ @"items": items ?: @[], @"nextSince": nextSince ?: @"", @"mode": @"delta" });
 }
 
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:
