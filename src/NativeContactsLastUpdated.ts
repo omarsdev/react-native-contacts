@@ -37,10 +37,21 @@ export type ContactChange = Contact & {
   } | null;
 };
 
-export interface Spec extends TurboModule {
-  // Simple sample kept for template parity
-  multiply(a: number, b: number): number;
+type NativeDeltaResult = {
+  items: ContactChange[];
+  nextSince: string;
+  mode?: 'delta';
+};
 
+type NativeFullResult = {
+  items: Contact[];
+  nextSince: string;
+  mode: 'full';
+};
+
+export type NativeUpdatedResult = NativeDeltaResult | NativeFullResult;
+
+export interface Spec extends TurboModule {
   // Paged full fetch; on Android sorted by last updated desc.
   // iOS order is undefined (CNContacts doesn’t expose last updated).
   getAll(offset: number, limit: number): Contact[];
@@ -56,14 +67,11 @@ export interface Spec extends TurboModule {
     since: string,
     offset: number,
     limit: number
-  ): { items: ContactChange[]; nextSince: string };
+  ): NativeUpdatedResult;
 
   // Persisted-delta helpers (native keeps a small token, not contacts)
   getPersistedSince(): string;
-  getUpdatedFromPersisted(
-    offset: number,
-    limit: number
-  ): { items: ContactChange[]; nextSince: string };
+  getUpdatedFromPersisted(offset: number, limit: number): NativeUpdatedResult;
   commitPersisted(nextSince: string): void;
 }
 
@@ -71,17 +79,18 @@ function createFallbackModule(): Spec {
   let persistedToken = '';
 
   return {
-    multiply: (a: number, b: number) => a * b,
     getAll: () => [],
     getById: () => null,
     getUpdatedSince: () => ({
       items: [] as ContactChange[],
       nextSince: persistedToken,
+      mode: 'delta',
     }),
     getPersistedSince: () => persistedToken,
     getUpdatedFromPersisted: () => ({
       items: [] as ContactChange[],
       nextSince: persistedToken,
+      mode: 'delta',
     }),
     commitPersisted: (nextSince: string) => {
       persistedToken = nextSince;
@@ -98,7 +107,11 @@ if (NativeModule === undefined || NativeModule === null) {
   throw new Error('ContactsLastUpdated native module unavailable.');
 }
 
-if (!('multiply' in NativeModule)) {
+if (
+  !('getAll' in NativeModule) ||
+  !('getById' in NativeModule) ||
+  !('getUpdatedSince' in NativeModule)
+) {
   console.warn(
     'ContactsLastUpdated native module missing expected methods. Using fallback implementation.'
   );

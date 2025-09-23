@@ -5,12 +5,6 @@
 @implementation ContactsLastUpdated
 RCT_EXPORT_MODULE()
 
-- (NSNumber *)multiply:(double)a b:(double)b {
-    NSNumber *result = @(a * b);
-
-    return result;
-}
-
 static NSString *const kCLUPersistedSinceKey = @"ContactsLastUpdatedPersistedSince";
 static NSString *const kCLUSnapshotDirName = @"ContactsLastUpdated";
 static NSString *const kCLUSnapshotFileName = @"fp.plist";
@@ -517,6 +511,17 @@ static void CLURegisterChangeEvent(NSMutableOrderedSet<NSString *> *changedIds,
         startToken = [[NSData alloc] initWithBase64EncodedString:sinceStr options:0];
     }
 
+    if (sinceStr == nil || sinceStr.length == 0) {
+        NSArray *page = [self getAll:offset limit:limit];
+        NSData *token = store.currentHistoryToken;
+        NSString *nextSince = token != nil ? [token base64EncodedStringWithOptions:0] : @"";
+        if (nextSince.length == 0) {
+            long long ms = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
+            nextSince = [NSString stringWithFormat:@"fp:%lld", ms];
+        }
+        return @{ @"items": page ?: @[], @"nextSince": nextSince ?: @"", @"mode": @"full" };
+    }
+
     NSMutableDictionary<NSString *, NSDictionary *> *snapshot = CLULoadSnapshot();
 
     NSMutableOrderedSet<NSString *> *changedIds = [NSMutableOrderedSet orderedSet];
@@ -542,14 +547,14 @@ static void CLURegisterChangeEvent(NSMutableOrderedSet<NSString *> *changedIds,
                 long long ms = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
                 fallbackNext = [NSString stringWithFormat:@"fp:%lld", ms];
             }
-            return @{ @"items": page ?: @[], @"nextSince": fallbackNext ?: @"" };
+            return @{ @"items": page ?: @[], @"nextSince": fallbackNext ?: @"", @"mode": @"delta" };
         }
     }
 
     if (lim <= 0) {
         NSData *newToken = store.currentHistoryToken;
         NSString *nextSince = newToken != nil ? [newToken base64EncodedStringWithOptions:0] : @"";
-        return @{ @"items": @[], @"nextSince": nextSince ?: @"" };
+        return @{ @"items": @[], @"nextSince": nextSince ?: @"", @"mode": @"delta" };
     }
 
     NSMutableArray<NSDictionary *> *items = [NSMutableArray array];
@@ -601,7 +606,7 @@ static void CLURegisterChangeEvent(NSMutableOrderedSet<NSString *> *changedIds,
         long long ms = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
         nextSince = [NSString stringWithFormat:@"fp:%lld", ms];
     }
-    return @{ @"items": items ?: @[], @"nextSince": nextSince ?: @"" };
+    return @{ @"items": items ?: @[], @"nextSince": nextSince ?: @"", @"mode": @"delta" };
 }
 
 - (void)commitPersisted:(NSString *)nextSince
@@ -668,13 +673,25 @@ static void CLURegisterChangeEvent(NSMutableOrderedSet<NSString *> *changedIds,
     return CLUContactToContactDict(contact);
 }
 
-// Paged delta since a change-history token. If `since` is empty, no items are returned
-// and the current token is provided as nextSince.
+// Paged delta since a change-history token. If `since` is empty, a full contact page is returned
+// (mode = full) alongside a synthetic token so callers can persist progress.
 - (NSDictionary *)getUpdatedSince:(NSString *)since offset:(double)offset limit:(double)limit
 {
     NSInteger off = (NSInteger)MAX(0, offset);
     NSInteger lim = (NSInteger)MAX(0, limit);
     CNContactStore *store = [CNContactStore new];
+
+    BOOL initialSync = (since == nil) || (since.length == 0);
+    if (initialSync) {
+        NSArray *page = [self getAll:offset limit:limit];
+        NSData *token = store.currentHistoryToken;
+        NSString *nextSince = token != nil ? [token base64EncodedStringWithOptions:0] : @"";
+        if (nextSince.length == 0) {
+            long long ms = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
+            nextSince = [NSString stringWithFormat:@"fp:%lld", ms];
+        }
+        return @{ @"items": page ?: @[], @"nextSince": nextSince ?: @"", @"mode": @"full" };
+    }
 
     NSData *startToken = nil;
     if (since != nil && since.length > 0) {
@@ -706,7 +723,7 @@ static void CLURegisterChangeEvent(NSMutableOrderedSet<NSString *> *changedIds,
                 long long ms = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
                 fallbackNext = [NSString stringWithFormat:@"fp:%lld", ms];
             }
-            return @{ @"items": page ?: @[], @"nextSince": fallbackNext ?: @"" };
+            return @{ @"items": page ?: @[], @"nextSince": fallbackNext ?: @"", @"mode": @"delta" };
         }
     }
 
@@ -717,7 +734,7 @@ static void CLURegisterChangeEvent(NSMutableOrderedSet<NSString *> *changedIds,
             long long ms = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
             nextSince = [NSString stringWithFormat:@"fp:%lld", ms];
         }
-        return @{ @"items": @[], @"nextSince": nextSince ?: @"" };
+        return @{ @"items": @[], @"nextSince": nextSince ?: @"", @"mode": @"delta" };
     }
 
     NSMutableArray<NSDictionary *> *items = [NSMutableArray array];
@@ -768,7 +785,7 @@ static void CLURegisterChangeEvent(NSMutableOrderedSet<NSString *> *changedIds,
         long long ms = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
         nextSince = [NSString stringWithFormat:@"fp:%lld", ms];
     }
-    return @{ @"items": items ?: @[], @"nextSince": nextSince ?: @"" };
+    return @{ @"items": items ?: @[], @"nextSince": nextSince ?: @"", @"mode": @"delta" };
 }
 
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:

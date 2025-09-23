@@ -27,12 +27,6 @@ class ContactsLastUpdatedModule(reactContext: ReactApplicationContext) :
     return NAME
   }
 
-  // Example method
-  // See https://reactnative.dev/docs/native-modules-android
-  override fun multiply(a: Double, b: Double): Double {
-    return a * b
-  }
-
   // Data class for internal mapping
   data class PhoneEntry(
     val id: String?,
@@ -109,10 +103,22 @@ class ContactsLastUpdatedModule(reactContext: ReactApplicationContext) :
     offset: Double,
     limit: Double
   ): WritableMap {
+    val off = offset.toInt().coerceAtLeast(0)
+    val lim = limit.toInt().coerceAtLeast(0)
+    if (since.isBlank()) {
+      val contacts = if (lim <= 0) emptyList() else queryContacts(off, lim, null)
+      val result = Arguments.createMap()
+      result.putArray("items", contactsToWritableArray(contacts))
+      result.putString("nextSince", System.currentTimeMillis().toString())
+      result.putString("mode", "full")
+      return result
+    }
+
     val delta = computeDelta(since.toLongOrNull() ?: 0L, offset, limit)
     val result = Arguments.createMap()
     result.putArray("items", deltasToWritableArray(delta.items))
     result.putString("nextSince", delta.nextSince)
+    result.putString("mode", "delta")
     return result
   }
 
@@ -122,14 +128,28 @@ class ContactsLastUpdatedModule(reactContext: ReactApplicationContext) :
   }
 
   override fun getPersistedSince(): String {
-    return prefs.getLong("since", 0L).toString()
+    val stored = prefs.getLong("since", 0L)
+    return if (stored <= 0L) "" else stored.toString()
   }
 
   override fun getUpdatedFromPersisted(offset: Double, limit: Double): WritableMap {
-    val delta = computeDelta(prefs.getLong("since", 0L), offset, limit)
+    val off = offset.toInt().coerceAtLeast(0)
+    val lim = limit.toInt().coerceAtLeast(0)
+    val stored = prefs.getLong("since", 0L)
+    if (stored <= 0L) {
+      val contacts = if (lim <= 0) emptyList() else queryContacts(off, lim, null)
+      val map = Arguments.createMap()
+      map.putArray("items", contactsToWritableArray(contacts))
+      map.putString("nextSince", System.currentTimeMillis().toString())
+      map.putString("mode", "full")
+      return map
+    }
+
+    val delta = computeDelta(stored, offset, limit)
     val map = Arguments.createMap()
     map.putArray("items", deltasToWritableArray(delta.items))
     map.putString("nextSince", delta.nextSince)
+    map.putString("mode", "delta")
     return map
   }
 
