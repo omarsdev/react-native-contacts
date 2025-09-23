@@ -240,12 +240,22 @@ jobs:
           git commit -m "chore: bump version to ${VERSION}"
           echo "did_commit=true" >> "$GITHUB_OUTPUT"
 
+      - name: Tag version
+        if: steps.commit.outputs.did_commit == 'true'
+        env:
+          VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          if git rev-parse "v${VERSION}" >/dev/null 2>&1; then
+            git tag -d "v${VERSION}"
+          fi
+          git tag -a "v${VERSION}" -m "v${VERSION}"
+
       - name: Push version bump
         if: steps.commit.outputs.did_commit == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git push
+          git push --follow-tags
 
       - name: Configure npm auth
         run: echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
@@ -254,3 +264,22 @@ jobs:
 
       - name: Publish release
         run: npm publish --access public
+
+      - name: Create GitHub release
+        if: steps.commit.outputs.did_commit == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          RELEASE_TAG="v${VERSION}"
+          RELEASE_URL="https://www.npmjs.com/package/@omarsdev/react-native-contacts/v/${VERSION}"
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "GitHub release $RELEASE_TAG already exists"
+            exit 0
+          fi
+
+          gh release create "$RELEASE_TAG" \
+            --latest \
+            --title "$RELEASE_TAG" \
+            --notes "Published on npm: ${RELEASE_URL}"
