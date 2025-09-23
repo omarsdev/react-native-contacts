@@ -114,7 +114,7 @@ jobs:
 
       - name: Build example for Android
         env:
-          JAVA_OPTS: "-XX:MaxHeapSize=6g"
+          JAVA_OPTS: '-XX:MaxHeapSize=6g'
         run: |
           yarn turbo run build:android --cache-dir="${{ env.TURBO_CACHE_DIR }}"
 
@@ -168,45 +168,45 @@ jobs:
         run: |
           yarn turbo run build:ios --cache-dir="${{ env.TURBO_CACHE_DIR }}"
 
-  publish-canary:
-    name: Publish canary to npm (PRs to main)
-    if: github.event_name == 'pull_request' && github.base_ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository
-    needs: [lint, test, build-library, build-android, build-ios]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      # publish-canary:
+      #   name: Publish canary to npm (PRs to main)
+      #   if: github.event_name == 'pull_request' && github.base_ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository
+      #   needs: [lint, test, build-library, build-android, build-ios]
+      #   runs-on: ubuntu-latest
+      #   steps:
+      #     - name: Checkout
+      #       uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Setup
-        uses: ./.github/actions/setup
+      #     - name: Setup
+      #       uses: ./.github/actions/setup
 
-      - name: Build package
-        run: yarn prepare
+      #     - name: Build package
+      #       run: yarn prepare
 
-      - name: Configure npm auth
-        run: |
-          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      #     - name: Configure npm auth
+      #       run: |
+      #         echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+      #       env:
+      #         NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Publish canary
-        env:
-          GITHUB_SHA: ${{ github.sha }}
-        run: |
-          BASE_VERSION=$(node -p "require('./package.json').version")
-          SHORT_SHA=${GITHUB_SHA::7}
-          # Use run_number to avoid collisions on repeated pushes
-          CANARY_VERSION="$BASE_VERSION-canary.${{ github.run_number }}.$SHORT_SHA"
-          echo "Canary version: $CANARY_VERSION"
-          npm version "$CANARY_VERSION" --no-git-tag-version
-          npm publish --access public --tag canary
+      #     - name: Publish canary
+      #       env:
+      #         GITHUB_SHA: ${{ github.sha }}
+      #       run: |
+      #         BASE_VERSION=$(node -p "require('./package.json').version")
+      #         SHORT_SHA=${GITHUB_SHA::7}
+      #         # Use run_number to avoid collisions on repeated pushes
+      #         CANARY_VERSION="$BASE_VERSION-canary.${{ github.run_number }}.$SHORT_SHA"
+      #         echo "Canary version: $CANARY_VERSION"
+      #         npm version "$CANARY_VERSION" --no-git-tag-version
+      #         npm publish --access public --tag canary
 
-  publish-release:
-    name: Publish release to npm
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]'
-    runs-on: ubuntu-latest
-    needs: [lint, test, build-library, build-android, build-ios]
-    steps:
+      # publish-release:
+      #   name: Publish release to npm
+      #   if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.actor != 'github-actions[bot]'
+      #   runs-on: ubuntu-latest
+      #   needs: [lint, test, build-library, build-android, build-ios]
+      #   steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
