@@ -57,7 +57,7 @@
   "homepage": "https://github.com/omarsdev/react-native-contacts#readme",
   "publishConfig": {
     "access": "public",
-    "registry": "https://npm.pkg.github.com"
+    "registry": "https://registry.npmjs.org/"
   },
   "devDependencies": {
     "@commitlint/config-conventional": "^19.8.1",
