@@ -88,7 +88,7 @@ const ContactsDemoScreen = () => {
           collected.push(
             ...response.items.map((contact) => ({
               ...contact,
-              changeType: 'created',
+              changeType: 'created' as ContactChange['changeType'],
               isDeleted: false,
               phoneNumberChanges: {
                 created: contact.phoneNumbers,
@@ -110,7 +110,8 @@ const ContactsDemoScreen = () => {
         }),
         { created: 0, updated: 0, deleted: 0 }
       );
-      const committedSince = nextSince && nextSince !== persistedSince ? nextSince : undefined;
+      const committedSince =
+        nextSince && nextSince !== persistedSince ? nextSince : undefined;
       if (committedSince) {
         commitPersisted(committedSince);
         setSince(committedSince);

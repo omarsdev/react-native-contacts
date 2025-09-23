@@ -9,12 +9,10 @@ type Props = {
   onFetchDelta: () => void;
 };
 
-const ControlPanel = React.memo(
-  ({ styles, loading, onFetchDelta }: Props) => (
-    <View style={styles.controls}>
-      <Button title="Fetch Delta" onPress={onFetchDelta} disabled={loading} />
-    </View>
-  )
-);
+const ControlPanel = React.memo(({ styles, loading, onFetchDelta }: Props) => (
+  <View style={styles.controls}>
+    <Button title="Fetch Delta" onPress={onFetchDelta} disabled={loading} />
+  </View>
+));
 
 export default ControlPanel;

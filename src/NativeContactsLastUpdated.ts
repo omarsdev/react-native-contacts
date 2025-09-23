@@ -71,10 +71,7 @@ export interface Spec extends TurboModule {
 
   // Persisted-delta helpers (native keeps a small token, not contacts)
   getPersistedSince(): string;
-  getUpdatedFromPersisted(
-    offset: number,
-    limit: number
-  ): NativeUpdatedResult;
+  getUpdatedFromPersisted(offset: number, limit: number): NativeUpdatedResult;
   commitPersisted(nextSince: string): void;
 }
 
