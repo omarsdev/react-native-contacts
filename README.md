@@ -93,9 +93,10 @@ type UpdatedPageBase = {
   totalContacts: number;
 };
 
-type UpdatedPage =
-  | (UpdatedPageBase & { mode: 'full'; items: Contact[] })
-  | (UpdatedPageBase & { mode: 'delta'; items: ContactChange[] });
+type UpdatedPage = UpdatedPageBase & {
+  mode: 'delta' | 'full';
+  items: ContactChange[];
+};
 ```
 
 API reference & examples
@@ -108,7 +109,7 @@ API reference & examples
 | `type PhoneNumberUpdate`  | Represents an individual phone number that changed within a contact delta (`previous` → `current`).                              |
 | `type PhoneNumberChanges` | Buckets the numbers added/removed/updated in a `ContactChange`. Useful when reconciling diffs.                                   |
 | `type ContactChange`      | Extends `Contact` with delta metadata (`changeType`, `isDeleted`, `phoneNumberChanges`, and an optional `previous` snapshot).    |
-| `type UpdatedPage`        | Union returned by paging APIs (`mode`, `items`, `nextSince`, and `totalContacts` so you know the device book size).              |
+| `type UpdatedPage`        | Page returned by paging APIs (`mode`, `items`, `nextSince`, and `totalContacts` so you know the device book size). Items are always `ContactChange[]`. |
 
 ### Functions (promise / async)
 
@@ -151,7 +152,7 @@ API reference & examples
   ```ts
   const page = await getUpdatedSincePaged(lastToken, 0, 200);
   if (page.mode === 'full') {
-    page.items.forEach((contact) => console.log('Full contact', contact.id));
+    page.items.forEach((change) => console.log('Full contact', change.id));
   } else {
     page.items.forEach((change) => console.log(change.changeType, change.id));
   }

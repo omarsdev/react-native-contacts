@@ -105,24 +105,10 @@ const ContactsDemoScreen = ({ onTotalContactsChange }: Props) => {
           if (response.items.length === 0) {
             return false;
           }
-          if (response.mode === 'delta') {
-            collected.push(...response.items);
-          } else {
+          if (response.mode === 'full') {
             usedFullFallback = true;
-            collected.push(
-              ...response.items.map((contact) => ({
-                ...contact,
-                changeType: 'created' as ContactChange['changeType'],
-                isDeleted: false,
-                phoneNumberChanges: {
-                  created: contact.phoneNumbers,
-                  deleted: [],
-                  updated: [],
-                },
-                previous: null,
-              }))
-            );
           }
+          collected.push(...response.items);
           pageOffset += response.items.length;
           return true;
         }

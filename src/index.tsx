@@ -12,17 +12,10 @@ type UpdatedPageBase = {
   totalContacts: number;
 };
 
-type DeltaPage = UpdatedPageBase & {
-  mode: 'delta';
+export type UpdatedPage = UpdatedPageBase & {
+  mode: 'delta' | 'full';
   items: ContactChange[];
 };
-
-type FullPage = UpdatedPageBase & {
-  mode: 'full';
-  items: Contact[];
-};
-
-export type UpdatedPage = DeltaPage | FullPage;
 
 type UpdatedPageHandler = (
   page: UpdatedPage
@@ -95,6 +88,47 @@ function resolveTotalContacts(nativeResult: {
   return Array.isArray(nativeResult.items) ? nativeResult.items.length : 0;
 }
 
+function synthesizeChangeFromContact(contact: Contact): ContactChange {
+  const numbers = Array.isArray(contact.phoneNumbers)
+    ? contact.phoneNumbers
+    : [];
+
+  return {
+    ...contact,
+    changeType: 'created',
+    isDeleted: false,
+    phoneNumberChanges: {
+      created: numbers,
+      deleted: [],
+      updated: [],
+    },
+    previous: null,
+  };
+}
+
+function normalizeDeltaChange(change: ContactChange): ContactChange {
+  const changes = change.phoneNumberChanges ?? {
+    created: [],
+    deleted: [],
+    updated: [],
+  };
+
+  return {
+    ...change,
+    changeType: change.changeType ?? (change.isDeleted ? 'deleted' : 'updated'),
+    isDeleted: Boolean(change.isDeleted),
+    phoneNumberChanges: {
+      created: Array.isArray(changes.created) ? changes.created : [],
+      deleted: Array.isArray(changes.deleted) ? changes.deleted : [],
+      updated: Array.isArray(changes.updated) ? changes.updated : [],
+    },
+    previous:
+      change.previous && typeof change.previous === 'object'
+        ? change.previous
+        : null,
+  };
+}
+
 // Convenience: fetch the entire contacts list in one call.
 export async function getAll(): Promise<Contact[]> {
   const contacts = await ContactsLastUpdated.getAll();
@@ -116,25 +150,31 @@ const getUpdatedSincePagedImpl = async (
   );
   const nextSince = result.nextSince ?? '';
   const totalContacts = resolveTotalContacts(result);
-  if (result.mode === 'full') {
+  const shouldTreatAsFull =
+    result.mode === 'full' || (since.trim().length === 0 && !nextSince);
+
+  if (shouldTreatAsFull) {
+    const contacts =
+      result.mode === 'full'
+        ? result.items
+        : (result as unknown as { items: Contact[] }).items;
     return {
       mode: 'full',
-      items: result.items,
+      items: Array.isArray(contacts)
+        ? contacts.map(synthesizeChangeFromContact)
+        : [],
       nextSince,
       totalContacts,
     };
   }
-  if (!nextSince && since.trim().length === 0) {
-    return {
-      mode: 'full',
-      items: (result as unknown as { items: Contact[] }).items,
-      nextSince,
-      totalContacts,
-    };
-  }
+
+  const deltas =
+    result.mode === 'delta'
+      ? result.items
+      : (result as unknown as { items: ContactChange[] }).items;
   return {
     mode: 'delta',
-    items: result.items,
+    items: Array.isArray(deltas) ? deltas.map(normalizeDeltaChange) : [],
     nextSince,
     totalContacts,
   };
