@@ -28,7 +28,11 @@ type DeltaTally = {
   deleted: number;
 };
 
-const ContactsDemoScreen = () => {
+type Props = {
+  onTotalContactsChange?: (count: number | null) => void;
+};
+
+const ContactsDemoScreen = ({ onTotalContactsChange }: Props) => {
   const systemTheme = useColorScheme();
   const theme: Theme = systemTheme === 'dark' ? 'dark' : 'light';
   const styles = React.useMemo(() => createStyles(theme), [theme]);
@@ -39,6 +43,7 @@ const ContactsDemoScreen = () => {
   const [since, setSince] = React.useState('');
   const [deltaStatus, setDeltaStatus] = React.useState('No delta fetched yet');
   const [log, setLog] = React.useState('');
+  const [totalContacts, setTotalContacts] = React.useState<number | null>(null);
   React.useEffect(() => {
     if (Platform.OS !== 'android') return;
     const requestPermission = async () => {
@@ -54,6 +59,12 @@ const ContactsDemoScreen = () => {
     setLog((prev) => `${new Date().toISOString()} ${message}\n${prev}`);
   }, []);
 
+  React.useEffect(() => {
+    if (onTotalContactsChange) {
+      onTotalContactsChange(totalContacts);
+    }
+  }, [onTotalContactsChange, totalContacts]);
+
   const fetchDelta = React.useCallback(async () => {
     if (!granted) {
       appendLog('Permission not granted');
@@ -63,45 +74,59 @@ const ContactsDemoScreen = () => {
     setDeltaStatus('Fetching delta…');
     try {
       const persistedSince = await getPersistedSince();
-      let offset = 0;
       let nextSince: string | undefined;
       let usedFullFallback = false;
       const collected: ContactChange[] = [];
       const started = Date.now();
-      for (;;) {
-        const response = await getUpdatedSincePaged(
-          persistedSince,
-          offset,
-          PAGE_FETCH_LIMIT
-        );
-        if (response.nextSince) {
-          nextSince = response.nextSince;
-        }
-        appendLog(
-          `Fetched ${response.mode} page: baseSince=${persistedSince} offset=${offset} size=${response.items.length} nextSince=${response.nextSince || '∅'}`
-        );
-        if (response.items.length === 0) break;
-        if (response.mode === 'delta') {
-          collected.push(...response.items);
-        } else {
-          usedFullFallback = true;
-          collected.push(
-            ...response.items.map((contact) => ({
-              ...contact,
-              changeType: 'created' as ContactChange['changeType'],
-              isDeleted: false,
-              phoneNumberChanges: {
-                created: contact.phoneNumbers,
-                deleted: [],
-                updated: [],
-              },
-              previous: null,
-            }))
+      let latestTotal: number | null = null;
+      let pageOffset = 0;
+
+      await getUpdatedSincePaged.listen(
+        { since: persistedSince, offset: 0, pageSize: PAGE_FETCH_LIMIT },
+        async (response) => {
+          if (response.mode === 'full') {
+            const nextTotal =
+              typeof response.totalContacts === 'number'
+                ? response.totalContacts
+                : response.items.length;
+            latestTotal = nextTotal;
+            setTotalContacts(nextTotal);
+          }
+          if (response.nextSince) {
+            nextSince = response.nextSince;
+          }
+          appendLog(
+            `Fetched ${response.mode} page: baseSince=${persistedSince} offset=${pageOffset} size=${response.items.length} total=${
+              typeof response.totalContacts === 'number'
+                ? response.totalContacts
+                : '∅'
+            } nextSince=${response.nextSince || '∅'}`
           );
+          if (response.items.length === 0) {
+            return false;
+          }
+          if (response.mode === 'delta') {
+            collected.push(...response.items);
+          } else {
+            usedFullFallback = true;
+            collected.push(
+              ...response.items.map((contact) => ({
+                ...contact,
+                changeType: 'created' as ContactChange['changeType'],
+                isDeleted: false,
+                phoneNumberChanges: {
+                  created: contact.phoneNumbers,
+                  deleted: [],
+                  updated: [],
+                },
+                previous: null,
+              }))
+            );
+          }
+          pageOffset += response.items.length;
+          return true;
         }
-        offset += response.items.length;
-        if (response.items.length < PAGE_FETCH_LIMIT) break;
-      }
+      );
       setChanges(collected);
       const summary = collected.reduce<DeltaTally>(
         (acc, item) => ({
@@ -122,8 +147,12 @@ const ContactsDemoScreen = () => {
       appendLog(
         `Completed delta fetch. Items=${collected.length} (created=${summary.created}, updated=${summary.updated}, deleted=${summary.deleted}) committedSince=${committedSince || persistedSince} in ${Date.now() - started}ms${fallbackNote}`
       );
+      const finalTotal =
+        typeof latestTotal === 'number' ? latestTotal : totalContacts;
+      const totalNote =
+        typeof finalTotal === 'number' ? `, total contacts ${finalTotal}` : '';
       setDeltaStatus(
-        `Delta: ${collected.length} (created ${summary.created}, updated ${summary.updated}, deleted ${summary.deleted})${fallbackNote}`
+        `Delta: ${collected.length} (created ${summary.created}, updated ${summary.updated}, deleted ${summary.deleted})${fallbackNote}${totalNote}`
       );
     } catch (error: any) {
       appendLog(`Error: ${error?.message || String(error)}`);
@@ -131,7 +160,7 @@ const ContactsDemoScreen = () => {
     } finally {
       setLoading(false);
     }
-  }, [appendLog, granted]);
+  }, [appendLog, granted, totalContacts]);
 
   const listLabel = 'Delta Contacts';
   const listData = changes;
@@ -167,6 +196,7 @@ const ContactsDemoScreen = () => {
         since={since}
         listLabel={listLabel}
         listCount={listData.length}
+        totalCount={totalContacts}
       />
       {loading ? (
         <View style={styles.loadingBox}>

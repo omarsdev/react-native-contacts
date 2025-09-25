@@ -11,6 +11,7 @@ type Props = {
   since: string;
   listLabel: string;
   listCount: number;
+  totalCount?: number | null;
 };
 
 const InfoPanel = React.memo(
@@ -22,6 +23,7 @@ const InfoPanel = React.memo(
     since,
     listLabel,
     listCount,
+    totalCount,
   }: Props) => (
     <View style={styles.info}>
       <Text style={styles.text}>Delta status: {deltaStatus}</Text>
@@ -35,6 +37,9 @@ const InfoPanel = React.memo(
       <Text style={styles.text}>
         Showing {listCount} {listLabel}
       </Text>
+      {typeof totalCount === 'number' ? (
+        <Text style={styles.text}>Total device contacts: {totalCount}</Text>
+      ) : null}
     </View>
   )
 );

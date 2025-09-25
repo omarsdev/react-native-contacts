@@ -37,24 +37,26 @@ export type ContactChange = Contact & {
   } | null;
 };
 
-type NativeDeltaResult = {
-  items: ContactChange[];
+type NativeUpdatedBase<T> = {
+  items: T;
   nextSince: string;
+  totalContacts?: number;
+};
+
+type NativeDeltaResult = NativeUpdatedBase<ContactChange[]> & {
   mode?: 'delta';
 };
 
-type NativeFullResult = {
-  items: Contact[];
-  nextSince: string;
+type NativeFullResult = NativeUpdatedBase<Contact[]> & {
   mode: 'full';
 };
 
 export type NativeUpdatedResult = NativeDeltaResult | NativeFullResult;
 
 export interface Spec extends TurboModule {
-  // Paged full fetch; on Android sorted by last updated desc.
+  // Full fetch; on Android sorted by last updated desc.
   // iOS order is undefined (CNContacts doesn’t expose last updated).
-  getAll(offset: number, limit: number): Promise<Contact[]>;
+  getAll(): Promise<Contact[]>;
 
   // Retrieve a single contact by identifier if it exists.
   getById(id: string): Promise<Contact | null>;
@@ -88,12 +90,14 @@ function createFallbackModule(): Spec {
       items: [] as ContactChange[],
       nextSince: persistedToken,
       mode: 'delta',
+      totalContacts: 0,
     }),
     getPersistedSince: async () => persistedToken,
     getUpdatedFromPersisted: async () => ({
       items: [] as ContactChange[],
       nextSince: persistedToken,
       mode: 'delta',
+      totalContacts: 0,
     }),
     commitPersisted: async (nextSince: string) => {
       persistedToken = nextSince;
