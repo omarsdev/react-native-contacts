@@ -92,9 +92,9 @@ static NSDictionary *CLUContactToContactDict(CNContact *c) {
     };
 }
 
-static NSArray<NSDictionary *> *CLUFetchContactPage(NSInteger off, NSInteger lim) {
-    if (lim <= 0) {
-        return @[];
+static NSDictionary *CLUFetchContactPageInternal(NSInteger off, NSInteger lim, BOOL includeTotal) {
+    if (lim < 0) {
+        lim = 0;
     }
 
     CNContactStore *store = [CNContactStore new];
@@ -106,15 +106,66 @@ static NSArray<NSDictionary *> *CLUFetchContactPage(NSInteger off, NSInteger lim
                       CNContactPhoneNumbersKey];
     CNContactFetchRequest *request = [[CNContactFetchRequest alloc] initWithKeysToFetch:keys];
 
-    NSMutableArray<NSDictionary *> *results = [NSMutableArray arrayWithCapacity:lim];
+    NSMutableArray<NSDictionary *> *results = [NSMutableArray arrayWithCapacity:(NSUInteger)lim];
     __block NSInteger index = -1;
+    __block NSInteger total = 0;
     BOOL ok = [store enumerateContactsWithFetchRequest:request
                                                 error:&err
                                            usingBlock:^(CNContact * _Nonnull contact, BOOL * _Nonnull stop) {
         index += 1;
+        total = index + 1;
         if (index < off) { return; }
-        if ((NSInteger)results.count >= lim) { *stop = YES; return; }
+        if ((NSInteger)results.count < lim) {
+            [results addObject:CLUContactToContactDict(contact)];
+        }
+        if (!includeTotal && lim > 0 && (NSInteger)results.count >= lim) {
+            *stop = YES;
+        }
+    }];
 
+    if (!ok || err) {
+        if (includeTotal) {
+            return @{ @"items": @[], @"total": @0 };
+        }
+        return @{ @"items": @[], @"total": @(off) };
+    }
+
+    if (!includeTotal) {
+        total = off + (NSInteger)results.count;
+    }
+
+    return @{ @"items": results ?: @[], @"total": @(total) };
+}
+
+static NSArray<NSDictionary *> *CLUFetchContactPage(NSInteger off, NSInteger lim) {
+    NSDictionary *page = CLUFetchContactPageInternal(off, lim, NO);
+    NSArray<NSDictionary *> *items = page[@"items"];
+    return items ?: @[];
+}
+
+static NSDictionary *CLUPagedContactsWithTotal(NSInteger off, NSInteger lim) {
+    NSDictionary *page = CLUFetchContactPageInternal(off, lim, YES);
+    NSArray<NSDictionary *> *items = page[@"items"];
+    NSNumber *total = page[@"total"];
+    NSArray<NSDictionary *> *safeItems = items ?: @[];
+    NSNumber *safeTotal = total ?: @(safeItems.count);
+    return @{ @"items": safeItems, @"total": safeTotal };
+}
+
+static NSArray<NSDictionary *> *CLUFetchAllContacts(void) {
+    CNContactStore *store = [CNContactStore new];
+    NSError *err = nil;
+
+    NSArray *keys = @[CNContactIdentifierKey,
+                      CNContactGivenNameKey,
+                      CNContactFamilyNameKey,
+                      CNContactPhoneNumbersKey];
+    CNContactFetchRequest *request = [[CNContactFetchRequest alloc] initWithKeysToFetch:keys];
+
+    NSMutableArray<NSDictionary *> *results = [NSMutableArray array];
+    BOOL ok = [store enumerateContactsWithFetchRequest:request
+                                                error:&err
+                                           usingBlock:^(CNContact * _Nonnull contact, BOOL * _Nonnull stop) {
         [results addObject:CLUContactToContactDict(contact)];
     }];
 
@@ -547,14 +598,21 @@ static void CLURegisterChangeEvent(NSMutableOrderedSet<NSString *> *changedIds,
     }
 
     if (sinceStr == nil || sinceStr.length == 0) {
-        NSArray *page = CLUFetchContactPage(off, lim);
+        NSDictionary *pageResult = CLUPagedContactsWithTotal(off, lim);
+        NSArray *page = pageResult[@"items"];
+        NSNumber *total = pageResult[@"total"];
         NSData *token = store.currentHistoryToken;
         NSString *nextSince = token != nil ? [token base64EncodedStringWithOptions:0] : @"";
         if (nextSince.length == 0) {
             long long ms = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
             nextSince = [NSString stringWithFormat:@"fp:%lld", ms];
         }
-        resolve(@{ @"items": page ?: @[], @"nextSince": nextSince ?: @"", @"mode": @"full" });
+        NSArray *safePage = page ?: @[];
+        NSNumber *safeTotal = total ?: @(safePage.count);
+        resolve(@{ @"items": safePage,
+                   @"nextSince": nextSince ?: @"",
+                   @"mode": @"full",
+                   @"totalContacts": safeTotal });
         return;
     }
 
@@ -664,16 +722,10 @@ static void CLURegisterChangeEvent(NSMutableOrderedSet<NSString *> *changedIds,
     resolve(nil);
 }
 
-// Paged full fetch. iOS cannot sort by last updated (not exposed),
-// so the order is undefined. Use small limits for performance.
-- (void)getAll:(double)offset
-       limit:(double)limit
-      resolve:(RCTPromiseResolveBlock)resolve
+- (void)getAll:(RCTPromiseResolveBlock)resolve
        reject:(RCTPromiseRejectBlock)reject
 {
-    NSInteger off = (NSInteger)MAX(0, offset);
-    NSInteger lim = (NSInteger)MAX(0, limit);
-    resolve(CLUFetchContactPage(off, lim));
+    resolve(CLUFetchAllContacts());
 }
 
 - (void)getById:(NSString *)identifier
@@ -712,14 +764,21 @@ static void CLURegisterChangeEvent(NSMutableOrderedSet<NSString *> *changedIds,
 
     BOOL initialSync = (since == nil) || (since.length == 0);
     if (initialSync) {
-        NSArray *page = CLUFetchContactPage(off, lim);
+        NSDictionary *pageResult = CLUPagedContactsWithTotal(off, lim);
+        NSArray *page = pageResult[@"items"];
+        NSNumber *total = pageResult[@"total"];
         NSData *token = store.currentHistoryToken;
         NSString *nextSince = token != nil ? [token base64EncodedStringWithOptions:0] : @"";
         if (nextSince.length == 0) {
             long long ms = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
             nextSince = [NSString stringWithFormat:@"fp:%lld", ms];
         }
-        resolve(@{ @"items": page ?: @[], @"nextSince": nextSince ?: @"", @"mode": @"full" });
+        NSArray *safePage = page ?: @[];
+        NSNumber *safeTotal = total ?: @(safePage.count);
+        resolve(@{ @"items": safePage,
+                   @"nextSince": nextSince ?: @"",
+                   @"mode": @"full",
+                   @"totalContacts": safeTotal });
         return;
     }
 

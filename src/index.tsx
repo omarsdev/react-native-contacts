@@ -7,105 +7,216 @@ export type {
   PhoneNumberUpdate,
 } from './NativeContactsLastUpdated';
 
-type DeltaPage = {
-  mode: 'delta';
+type UpdatedPageBase = {
+  nextSince: string;
+  totalContacts: number;
+};
+
+export type UpdatedPage = UpdatedPageBase & {
+  mode: 'delta' | 'full';
   items: ContactChange[];
-  nextSince: string;
 };
 
-type FullPage = {
-  mode: 'full';
-  items: Contact[];
-  nextSince: string;
-};
+type UpdatedPageHandler = (
+  page: UpdatedPage
+) => void | boolean | Promise<void | boolean>;
 
-export type UpdatedPage = DeltaPage | FullPage;
-
-// Convenience: fetch contacts either by page or entire list.
-// Provide `limit` to fetch a single page; omit to stream until exhaustion starting at optional `offset`.
-export async function getAll(options?: {
+type SinceListenOptions = {
+  since?: string;
   offset?: number;
-  limit?: number;
   pageSize?: number;
-}): Promise<Contact[]> {
-  const offset = options?.offset ?? 0;
-  if (typeof options?.limit === 'number') {
-    return ContactsLastUpdated.getAll(offset, options.limit);
+};
+
+type ListenWithOptions<TOptions> = {
+  (handler: UpdatedPageHandler, options?: TOptions): Promise<void>;
+  (options: TOptions, handler: UpdatedPageHandler): Promise<void>;
+};
+
+type GetUpdatedSincePagedFn = {
+  (since: string, offset: number, limit: number): Promise<UpdatedPage>;
+  listen: ListenWithOptions<SinceListenOptions>;
+};
+
+const DEFAULT_PAGE_SIZE = 300;
+
+function ensurePositivePageSize(value?: number): number {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return Math.floor(value);
   }
-  const pageSize = options?.pageSize ?? 500;
-  let cursor = offset;
-  const results: Contact[] = [];
-  while (true) {
-    const page = await ContactsLastUpdated.getAll(cursor, pageSize);
-    if (!page || page.length === 0) break;
-    results.push(...page);
-    cursor += page.length;
-    if (page.length < pageSize) break;
+  return DEFAULT_PAGE_SIZE;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object';
+}
+
+function normalizeListenArgs<TOptions extends object>(
+  arg1: UpdatedPageHandler | TOptions | undefined,
+  arg2?: UpdatedPageHandler | TOptions
+): { handler: UpdatedPageHandler; options: TOptions } {
+  let handler: UpdatedPageHandler | undefined;
+  let options: TOptions | undefined;
+
+  if (typeof arg1 === 'function') {
+    handler = arg1;
+  } else if (isRecord(arg1)) {
+    options = arg1 as TOptions;
   }
-  return results;
+
+  if (typeof arg2 === 'function') {
+    handler = arg2;
+  } else if (isRecord(arg2)) {
+    options = arg2 as TOptions;
+  }
+
+  if (!handler) {
+    throw new TypeError(
+      'A page handler function must be provided to listen().'
+    );
+  }
+
+  return { handler, options: options ?? ({} as TOptions) };
+}
+
+function resolveTotalContacts(nativeResult: {
+  totalContacts?: number;
+  items: unknown;
+}): number {
+  if (typeof nativeResult.totalContacts === 'number') {
+    return nativeResult.totalContacts;
+  }
+  return Array.isArray(nativeResult.items) ? nativeResult.items.length : 0;
+}
+
+function synthesizeChangeFromContact(contact: Contact): ContactChange {
+  const numbers = Array.isArray(contact.phoneNumbers)
+    ? contact.phoneNumbers
+    : [];
+
+  return {
+    ...contact,
+    changeType: 'created',
+    isDeleted: false,
+    phoneNumberChanges: {
+      created: numbers,
+      deleted: [],
+      updated: [],
+    },
+    previous: null,
+  };
+}
+
+function normalizeDeltaChange(change: ContactChange): ContactChange {
+  const changes = change.phoneNumberChanges ?? {
+    created: [],
+    deleted: [],
+    updated: [],
+  };
+
+  return {
+    ...change,
+    changeType: change.changeType ?? (change.isDeleted ? 'deleted' : 'updated'),
+    isDeleted: Boolean(change.isDeleted),
+    phoneNumberChanges: {
+      created: Array.isArray(changes.created) ? changes.created : [],
+      deleted: Array.isArray(changes.deleted) ? changes.deleted : [],
+      updated: Array.isArray(changes.updated) ? changes.updated : [],
+    },
+    previous:
+      change.previous && typeof change.previous === 'object'
+        ? change.previous
+        : null,
+  };
+}
+
+// Convenience: fetch the entire contacts list in one call.
+export async function getAll(): Promise<Contact[]> {
+  const contacts = await ContactsLastUpdated.getAll();
+  return Array.isArray(contacts) ? contacts : [];
 }
 
 // Paged API: Delta list since a token.
 // Android: token is a millisecond timestamp string.
 // iOS: token is a base64-encoded CNChangeHistory token.
-export async function getUpdatedSincePaged(
+const getUpdatedSincePagedImpl = async (
   since: string,
   offset: number,
   limit: number
-): Promise<UpdatedPage> {
+): Promise<UpdatedPage> => {
   const result = await ContactsLastUpdated.getUpdatedSince(
     since,
     offset,
     limit
   );
   const nextSince = result.nextSince ?? '';
-  if (result.mode === 'full') {
+  const totalContacts = resolveTotalContacts(result);
+  const shouldTreatAsFull =
+    result.mode === 'full' || (since.trim().length === 0 && !nextSince);
+
+  if (shouldTreatAsFull) {
+    const contacts =
+      result.mode === 'full'
+        ? result.items
+        : (result as unknown as { items: Contact[] }).items;
     return {
       mode: 'full',
-      items: result.items,
+      items: Array.isArray(contacts)
+        ? contacts.map(synthesizeChangeFromContact)
+        : [],
       nextSince,
+      totalContacts,
     };
   }
-  if (!nextSince && since.trim().length === 0) {
-    return {
-      mode: 'full',
-      items: (result as unknown as { items: Contact[] }).items,
-      nextSince,
-    };
-  }
+
+  const deltas =
+    result.mode === 'delta'
+      ? result.items
+      : (result as unknown as { items: ContactChange[] }).items;
   return {
     mode: 'delta',
-    items: result.items,
+    items: Array.isArray(deltas) ? deltas.map(normalizeDeltaChange) : [],
     nextSince,
+    totalContacts,
   };
-}
+};
+
+export const getUpdatedSincePaged =
+  getUpdatedSincePagedImpl as GetUpdatedSincePagedFn;
+
+getUpdatedSincePaged.listen = async function (
+  arg1?: UpdatedPageHandler | SinceListenOptions,
+  arg2?: UpdatedPageHandler | SinceListenOptions
+): Promise<void> {
+  const { handler, options } = normalizeListenArgs<SinceListenOptions>(
+    arg1,
+    arg2
+  );
+  const baseSince = options.since ?? '';
+  let offset = options.offset ?? 0;
+  const pageSize = ensurePositivePageSize(options.pageSize);
+
+  while (true) {
+    const page = await getUpdatedSincePaged(baseSince, offset, pageSize);
+    const handlerResult = await handler(page);
+    if (handlerResult === false) {
+      break;
+    }
+
+    const length = Array.isArray(page.items) ? page.items.length : 0;
+    if (length <= 0) {
+      break;
+    }
+
+    offset += length;
+    if (length < pageSize) {
+      break;
+    }
+  }
+};
 
 // Persisted-delta helpers
 export async function getPersistedSince(): Promise<string> {
   return ContactsLastUpdated.getPersistedSince();
-}
-
-export async function getUpdatedFromPersistedPaged(
-  offset: number,
-  limit: number
-): Promise<UpdatedPage> {
-  const result = await ContactsLastUpdated.getUpdatedFromPersisted(
-    offset,
-    limit
-  );
-  const nextSince = result.nextSince ?? '';
-  if (result.mode === 'full' || !nextSince) {
-    return {
-      mode: 'full',
-      items: (result as unknown as { items: Contact[] }).items,
-      nextSince,
-    };
-  }
-  return {
-    mode: 'delta',
-    items: result.items,
-    nextSince,
-  };
 }
 
 export async function commitPersisted(nextSince: string): Promise<void> {

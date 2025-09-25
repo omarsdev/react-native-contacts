@@ -17,6 +17,7 @@ import java.io.File
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.LinkedHashMap
+import kotlin.math.min
 
 @Suppress("unused")
 
@@ -41,6 +42,11 @@ class ContactsLastUpdatedModule(reactContext: ReactApplicationContext) :
     val lastUpdatedAt: Long?,
     val givenName: String? = null,
     val familyName: String? = null
+  )
+
+  data class ContactPage(
+    val items: List<Contact>,
+    val total: Int
   )
 
   data class SnapshotContact(
@@ -85,14 +91,8 @@ class ContactsLastUpdatedModule(reactContext: ReactApplicationContext) :
     val sortTimestamp: Long
   )
 
-  override fun getAll(offset: Double, limit: Double, promise: Promise) {
-    val off = offset.toInt().coerceAtLeast(0)
-    val lim = limit.toInt().coerceAtLeast(0)
-    if (lim <= 0) {
-      promise.resolve(Arguments.createArray())
-      return
-    }
-    val contacts = queryContacts(off, lim, null)
+  override fun getAll(promise: Promise) {
+    val contacts = queryContactsPage(0, Int.MAX_VALUE, null).items
     promise.resolve(contactsToWritableArray(contacts))
   }
 
@@ -114,9 +114,10 @@ class ContactsLastUpdatedModule(reactContext: ReactApplicationContext) :
     val off = offset.toInt().coerceAtLeast(0)
     val lim = limit.toInt().coerceAtLeast(0)
     if (since.isBlank()) {
-      val contacts = if (lim <= 0) emptyList() else queryContacts(off, lim, null)
+      val page = queryContactsPage(off, lim, null)
       val result = Arguments.createMap()
-      result.putArray("items", contactsToWritableArray(contacts))
+      result.putArray("items", contactsToWritableArray(page.items))
+      result.putInt("totalContacts", page.total)
       result.putString("nextSince", System.currentTimeMillis().toString())
       result.putString("mode", "full")
       promise.resolve(result)
@@ -150,9 +151,10 @@ class ContactsLastUpdatedModule(reactContext: ReactApplicationContext) :
     val lim = limit.toInt().coerceAtLeast(0)
     val stored = prefs.getLong("since", 0L)
     if (stored <= 0L) {
-      val contacts = if (lim <= 0) emptyList() else queryContacts(off, lim, null)
+      val page = queryContactsPage(off, lim, null)
       val map = Arguments.createMap()
-      map.putArray("items", contactsToWritableArray(contacts))
+      map.putArray("items", contactsToWritableArray(page.items))
+      map.putInt("totalContacts", page.total)
       map.putString("nextSince", System.currentTimeMillis().toString())
       map.putString("mode", "full")
       promise.resolve(map)
@@ -223,7 +225,7 @@ class ContactsLastUpdatedModule(reactContext: ReactApplicationContext) :
   private fun queryContactsForDelta(sinceMs: Long, desiredCount: Int): List<Contact> {
     if (desiredCount <= 0) return emptyList()
     val filter = if (sinceMs > 0) sinceMs else null
-    return queryContacts(0, desiredCount, filter)
+    return queryContactsPage(0, desiredCount, filter).items
   }
 
   private fun queryDeletedContacts(sinceMs: Long, desiredCount: Int): List<DeletedContact> {
@@ -318,7 +320,7 @@ class ContactsLastUpdatedModule(reactContext: ReactApplicationContext) :
     )
   }
 
-  private fun queryContacts(offset: Int, limit: Int, sinceMs: Long?): List<Contact> {
+  private fun queryContactsPage(offset: Int, limit: Int, sinceMs: Long?): ContactPage {
     val cr: ContentResolver = reactApplicationContext.contentResolver
     val uri: Uri = ContactsContract.Contacts.CONTENT_URI
     val projection = arrayOf(
@@ -340,12 +342,17 @@ class ContactsLastUpdatedModule(reactContext: ReactApplicationContext) :
     }
 
     val sortOrder = ContactsContract.Contacts.CONTACT_LAST_UPDATED_TIMESTAMP + " DESC"
-    val items = ArrayList<Contact>(limit)
     val cursor: Cursor? = cr.query(uri, projection, selection, selectionArgs, sortOrder)
     cursor?.use { c ->
-      if (!c.moveToPosition(offset)) {
-        return emptyList()
+      val total = c.count
+      if (limit <= 0) {
+        return ContactPage(emptyList(), total)
       }
+      if (!c.moveToPosition(offset)) {
+        return ContactPage(emptyList(), total)
+      }
+      val capacity = if (total <= offset) 0 else min(limit, total - offset)
+      val items = ArrayList<Contact>(capacity)
       var count = 0
       do {
         val id = c.getLong(c.getColumnIndexOrThrow(ContactsContract.Contacts._ID)).toString()
@@ -358,8 +365,13 @@ class ContactsLastUpdatedModule(reactContext: ReactApplicationContext) :
         items.add(Contact(id, name, phones, updatedAt))
         count++
       } while (c.moveToNext() && count < limit)
+      return ContactPage(items, total)
     }
-    return items
+    return ContactPage(emptyList(), 0)
+  }
+
+  private fun queryContacts(offset: Int, limit: Int, sinceMs: Long?): List<Contact> {
+    return queryContactsPage(offset, limit, sinceMs).items
   }
 
   private fun queryContactById(contactId: String): Contact? {

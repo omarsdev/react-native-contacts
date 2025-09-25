@@ -88,9 +88,15 @@ type ContactChange = Contact & {
   } | null;
 };
 
-type UpdatedPage =
-  | { mode: 'full'; items: Contact[]; nextSince: string }
-  | { mode: 'delta'; items: ContactChange[]; nextSince: string };
+type UpdatedPageBase = {
+  nextSince: string;
+  totalContacts: number;
+};
+
+type UpdatedPage = UpdatedPageBase & {
+  mode: 'delta' | 'full';
+  items: ContactChange[];
+};
 ```
 
 API reference & examples
@@ -103,6 +109,7 @@ API reference & examples
 | `type PhoneNumberUpdate`  | Represents an individual phone number that changed within a contact delta (`previous` → `current`).                              |
 | `type PhoneNumberChanges` | Buckets the numbers added/removed/updated in a `ContactChange`. Useful when reconciling diffs.                                   |
 | `type ContactChange`      | Extends `Contact` with delta metadata (`changeType`, `isDeleted`, `phoneNumberChanges`, and an optional `previous` snapshot).    |
+| `type UpdatedPage`        | Page returned by paging APIs (`mode`, `items`, `nextSince`, and `totalContacts` so you know the device book size). Items are always `ContactChange[]`. |
 
 ### Functions (promise / async)
 
@@ -131,12 +138,12 @@ API reference & examples
   await commitPersisted(nextToken);
   ```
 
-- `getAll(options?: { offset?: number; limit?: number; pageSize?: number }): Promise<Contact[]>`
-  - Convenience wrapper for the native `getAll`. When `limit` is provided it returns that specific page. Otherwise it loops until all contacts are fetched (respecting `pageSize`, default 500).
+- `getAll(): Promise<Contact[]>`
+  - Convenience helper that returns the full native contact list in one call.
 
   ```ts
-  const everyone = await getAll({ pageSize: 400 });
-  const pageTwo = await getAll({ offset: 400, limit: 200 });
+  const everyone = await getAll();
+  console.log('Fetched contacts', everyone.length);
   ```
 
 - `getUpdatedSincePaged(since: string, offset: number, limit: number): Promise<UpdatedPage>`
@@ -145,18 +152,27 @@ API reference & examples
   ```ts
   const page = await getUpdatedSincePaged(lastToken, 0, 200);
   if (page.mode === 'full') {
-    page.items.forEach((contact) => console.log('Full contact', contact.id));
+    page.items.forEach((change) => console.log('Full contact', change.id));
   } else {
     page.items.forEach((change) => console.log(change.changeType, change.id));
   }
+  console.log('Total contacts on device', page.totalContacts);
   ```
 
-- `getUpdatedFromPersistedPaged(offset: number, limit: number): Promise<UpdatedPage>`
-  - Same as above but the native layer provides the starting token (useful when you previously called `commitPersisted`). If the native token is missing the call yields `{ mode: 'full' }` so you can rebuild state from the full contacts list.
+  - Need to walk every page? Use `getUpdatedSincePaged.listen` to stream until exhaustion (return `false` from the handler to stop early). `pageSize` is optional and defaults to `300`.
+
   ```ts
-  const page = await getUpdatedFromPersistedPaged(0, 300);
-  console.log(page.mode, page.items.length);
+  await getUpdatedSincePaged.listen(
+    { since: lastToken, pageSize: 250 },
+    async (page) => {
+      console.log(
+        `Page mode=${page.mode} size=${page.items.length} total=${page.totalContacts}`
+      );
+    }
+  );
   ```
+
+  - Streaming signature: `getUpdatedSincePaged.listen(handler, options?)` or `getUpdatedSincePaged.listen(options, handler)`. The handler can be async and should return `false` to stop fetching. `options` accepts `{ since?: string; offset?: number; pageSize?: number }`.
 
 > iOS tokens:
 >
@@ -176,22 +192,29 @@ import { ensureContactsPermission } from './permissions'; // from snippet above
 // Delta or baseline sync (falls back to full pages when native tokens are unavailable)
 if (await ensureContactsPermission()) {
   const persistedSince = await getPersistedSince();
-  let offset = 0;
-  let nextSince: string | undefined;
+  const pageSize = 300;
+  let nextSince: string | undefined = persistedSince;
   let usedFullFallback = false;
-  for (;;) {
-    const page = await getUpdatedSincePaged(persistedSince, offset, 300);
-    if (page.nextSince) nextSince = page.nextSince;
-    if (!page.items.length) break;
-    const label = page.mode === 'full' ? 'Contacts page' : 'Delta page';
-    console.log(label, page.items.length);
-    if (page.mode === 'full') usedFullFallback = true;
-    offset += page.items.length;
-    if (page.items.length < 300) break;
-  }
-  if (nextSince && nextSince !== persistedSince) await commitPersisted(nextSince);
-  if (usedFullFallback && !nextSince)
+
+  await getUpdatedSincePaged.listen(
+    { since: persistedSince, pageSize },
+    (page) => {
+      if (page.nextSince) nextSince = page.nextSince;
+      if (!page.items.length) return false;
+      const label = page.mode === 'full' ? 'Contacts page' : 'Delta page';
+      console.log(
+        `${label}: ${page.items.length} items (total contacts ${page.totalContacts})`
+      );
+      if (page.mode === 'full') usedFullFallback = true;
+      return page.items.length >= pageSize;
+    }
+  );
+
+  if (nextSince && nextSince !== persistedSince) {
+    await commitPersisted(nextSince);
+  } else if (usedFullFallback && !nextSince) {
     console.log('Full snapshot processed; no token persisted yet.');
+  }
 }
 ```
 
@@ -213,30 +236,37 @@ await ensureContactsPermission();
 
 // 2. Pull the delta (or fallback full pages) since the last committed token and persist progress.
 const persistedSince = await getPersistedSince();
-let offset = 0;
+const pageSize = 300;
 let sessionToken = persistedSince;
+let totalContacts: number | undefined;
 const delta: ContactChange[] = [];
 let fullFallback: Contact[] = [];
-for (;;) {
-  const page = await getUpdatedSincePaged(persistedSince, offset, 300);
-  if (page.nextSince) sessionToken = page.nextSince;
-  if (!page.items.length) break;
-  if (page.mode === 'delta') {
-    delta.push(...page.items);
-  } else {
-    fullFallback = fullFallback.concat(page.items);
+
+await getUpdatedSincePaged.listen(
+  { since: persistedSince, pageSize },
+  (page) => {
+    if (page.nextSince) sessionToken = page.nextSince;
+    if (!page.items.length) return false;
+    totalContacts = page.totalContacts;
+    if (page.mode === 'delta') {
+      delta.push(...page.items);
+    } else {
+      fullFallback = fullFallback.concat(page.items);
+    }
+    return page.items.length >= pageSize;
   }
-  offset += page.items.length;
-  if (page.items.length < 300) break;
-}
+);
+
 if (sessionToken && sessionToken !== persistedSince) {
   await commitPersisted(sessionToken);
 }
 
-// 3. Full fallback pages can be handled like a baseline rebuild
-console.log('Full contacts received', fullFallback.length);
+console.log('Total contacts reported by native layer', totalContacts ?? 'unknown');
 
-// 4. Look up a single contact by identifier (helpful after any baseline).
+// 3. Full fallback pages can be handled like a baseline rebuild.
+console.log('Full snapshot contacts (if fallback)', fullFallback.length);
+
+// 4. Look up a single contact by identifier (helpful after any baseline rebuild).
 const singleContact = await getById('12345'); // returns `null` if the contact was deleted
 ```
 

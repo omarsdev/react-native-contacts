@@ -11,6 +11,7 @@ type Props = {
   since: string;
   listLabel: string;
   listCount: number;
+  totalCount?: number | null;
 };
 
 const InfoPanel = React.memo(
@@ -28,7 +29,7 @@ const InfoPanel = React.memo(
       <Text style={styles.text}>
         Granted: {String(granted)} • Loading: {String(loading)}
       </Text>
-      <Text style={styles.text}>
+      <Text style={styles.text} numberOfLines={1}>
         Since: {since || '(empty)'}
         {since?.startsWith('fp:') ? ' • fingerprint' : ''}
       </Text>
