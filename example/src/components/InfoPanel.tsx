@@ -23,23 +23,19 @@ const InfoPanel = React.memo(
     since,
     listLabel,
     listCount,
-    totalCount,
   }: Props) => (
     <View style={styles.info}>
       <Text style={styles.text}>Delta status: {deltaStatus}</Text>
       <Text style={styles.text}>
         Granted: {String(granted)} • Loading: {String(loading)}
       </Text>
-      <Text style={styles.text}>
+      <Text style={styles.text} numberOfLines={1}>
         Since: {since || '(empty)'}
         {since?.startsWith('fp:') ? ' • fingerprint' : ''}
       </Text>
       <Text style={styles.text}>
         Showing {listCount} {listLabel}
       </Text>
-      {typeof totalCount === 'number' ? (
-        <Text style={styles.text}>Total device contacts: {totalCount}</Text>
-      ) : null}
     </View>
   )
 );

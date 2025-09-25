@@ -1,27 +1,11 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import ContactsDemoScreen from './screens/ContactsDemoScreen';
-import { getUpdatedSincePaged } from '@omarsdev/react-native-contacts';
 
 export default function App() {
   const [totalContacts, setTotalContacts] = React.useState<number | null>(null);
-
-  useEffect(() => {
-    const getContacts = async () => {
-      await getUpdatedSincePaged.listen(
-        { since: '', pageSize: 1 },
-        async (page) => {
-          console.log(`Page mode=${page.mode} size=${page.items.length}`, {
-            items: page.items,
-          });
-        }
-      );
-    };
-
-    getContacts();
-  });
 
   return (
     <SafeAreaProvider>

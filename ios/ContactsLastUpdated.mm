@@ -2,12 +2,6 @@
 #import <Contacts/Contacts.h>
 #import <Foundation/Foundation.h>
 
-- (void)getAll:(RCTPromiseResolveBlock)resolve
-       reject:(RCTPromiseRejectBlock)reject
-{
-    resolve(CLUFetchAllContacts());
-}
-
 @implementation ContactsLastUpdated
 RCT_EXPORT_MODULE()
 
